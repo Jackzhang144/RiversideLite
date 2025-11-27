@@ -1,5 +1,5 @@
 const BBS_ROOT = "https://bbs.uestc.edu.cn/";
-const JUMP_URL = "https://bbs.uestc.edu.cn/new";
+const HOME_URL = "https://bbs.uestc.edu.cn/new";
 const CHECK_URL = "https://bbs.uestc.edu.cn/home.php?mod=space";
 const CHECK_INTERVAL_MINUTES = 1;
 const STATE_DEFAULTS = { lastTotal: 0, notificationsEnabled: true };
@@ -28,9 +28,13 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "mainLoop") checkStatus();
 });
 
-chrome.action.onClicked.addListener(() => {
-  clearCountsAndBadge().catch(console.error);
-  chrome.tabs.create({ url: JUMP_URL });
+chrome.action.onClicked.addListener(async () => {
+  try {
+    await clearCountsAndBadge();
+    await openOrFocusHomeTab();
+  } catch (error) {
+    console.error(error);
+  }
 });
 
 chrome.notifications.onClicked.addListener((notificationId) => {
@@ -98,22 +102,10 @@ function updateBadge(text, color) {
 async function handleNotificationClick(notificationId) {
   try {
     await clearCountsAndBadge();
-    await openOrFocusJumpUrl();
+    await openOrFocusHomeTab();
   } finally {
     chrome.notifications.clear(notificationId);
   }
-}
-
-async function openOrFocusJumpUrl() {
-  const [existingTab] = await chrome.tabs.query({ url: `${JUMP_URL}*` });
-
-  if (existingTab && existingTab.id !== undefined) {
-    await chrome.tabs.update(existingTab.id, { active: true });
-    await chrome.windows.update(existingTab.windowId, { focused: true });
-    return;
-  }
-
-  await chrome.tabs.create({ url: JUMP_URL });
 }
 
 async function ensureStateLoaded() {
@@ -164,4 +156,23 @@ async function maybeNotify(total, promptCount, pmCount) {
   });
 
   await persistState({ ...currentState, lastTotal: total });
+}
+
+async function openOrFocusHomeTab() {
+  const tabs = await chrome.tabs.query({ url: `${BBS_ROOT}*` });
+  const homeTab = tabs.find((tab) => isHomeTabUrl(tab.url));
+
+  if (homeTab && homeTab.id !== undefined) {
+    await chrome.tabs.update(homeTab.id, { active: true });
+    await chrome.windows.update(homeTab.windowId, { focused: true });
+    return;
+  }
+
+  await chrome.tabs.create({ url: HOME_URL });
+}
+
+function isHomeTabUrl(url) {
+  if (!url) return false;
+  if (url === HOME_URL || url.startsWith(`${HOME_URL}/`)) return true;
+  return url === BBS_ROOT || url.startsWith(`${BBS_ROOT}forum.php`);
 }
