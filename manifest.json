@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "清水河畔助手 Lite",
+  "version": "1.0",
+  "description": "清水河畔保活与消息提醒插件",
+  "icons": {
+    "16": "River.png",
+    "48": "River.png",
+    "128": "River.png"
+  },
+  "action": {
+    "default_title": "点击前往清水河畔",
+    "default_icon": "River.png"
+  },
+  "options_page": "options.html",
+  "permissions": [
+    "alarms",
+    "tabs",
+    "notifications",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://bbs.uestc.edu.cn/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Node dependencies
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-*.log
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+/.idea/
