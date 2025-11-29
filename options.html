@@ -13,25 +13,52 @@
       font-size: 20px;
       margin-bottom: 12px;
     }
+    .setting-group {
+      margin-bottom: 24px;
+    }
     label {
       display: flex;
       align-items: center;
       gap: 8px;
       font-size: 16px;
+      margin-bottom: 8px;
     }
     p {
-      margin-top: 12px;
+      margin-top: 0;
+      margin-bottom: 12px;
       color: #5c5c5c;
+      padding-left: 24px; /* Indent paragraph */
+    }
+    .radio-group label {
+      margin-bottom: 4px;
     }
   </style>
 </head>
 <body>
-  <h1>通知设置</h1>
-  <label>
-    <input type="checkbox" id="notificationsToggle">
-    启用系统通知
-  </label>
-  <p>关闭后仍会更新徽标，但不会弹出桌面通知。</p>
+  <div class="setting-group">
+    <h1>通知设置</h1>
+    <label>
+      <input type="checkbox" id="notificationsToggle">
+      启用系统通知
+    </label>
+    <p>关闭后仍会更新徽标，但不会弹出桌面通知。</p>
+  </div>
+
+  <div class="setting-group">
+    <h1>版本设置</h1>
+    <div class="radio-group">
+      <label>
+        <input type="radio" name="version" value="new" id="versionNew">
+        新版
+      </label>
+      <label>
+        <input type="radio" name="version" value="old" id="versionOld">
+        旧版
+      </label>
+    </div>
+    <p>选择新版或旧版 BBS 界面，将影响点击图标和通知后的跳转链接。</p>
+  </div>
+
   <script src="options.js"></script>
 </body>
 </html>

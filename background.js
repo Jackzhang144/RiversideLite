@@ -1,8 +1,24 @@
 const BBS_ROOT = "https://bbs.uestc.edu.cn/";
-const HOME_URL = "https://bbs.uestc.edu.cn/new";
 const CHECK_URL = "https://bbs.uestc.edu.cn/home.php?mod=space";
 const CHECK_INTERVAL_MINUTES = 1;
-const STATE_DEFAULTS = { lastTotal: 0, notificationsEnabled: true };
+
+const URLS = {
+  new: {
+    home: "https://bbs.uestc.edu.cn/new",
+    messages: "https://bbs.uestc.edu.cn/messages/posts",
+  },
+  old: {
+    home: "https://bbs.uestc.edu.cn/forum.php",
+    messages: "https://bbs.uestc.edu.cn/home.php?mod=space&do=notice",
+  },
+};
+
+const STATE_DEFAULTS = {
+  lastTotal: 0,
+  notificationsEnabled: true,
+  version: "new",
+};
+
 let cachedState = { ...STATE_DEFAULTS };
 let stateReady = false;
 
@@ -10,6 +26,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
   if (changes.notificationsEnabled && typeof changes.notificationsEnabled.newValue !== "undefined") {
     cachedState.notificationsEnabled = Boolean(changes.notificationsEnabled.newValue);
+  }
+  if (changes.version && typeof changes.version.newValue !== "undefined") {
+    cachedState.version = changes.version.newValue;
   }
 });
 
@@ -20,7 +39,7 @@ async function startup() {
   await ensureStateLoaded();
   chrome.alarms.clearAll(() => {
     chrome.alarms.create("mainLoop", { periodInMinutes: CHECK_INTERVAL_MINUTES });
-    checkStatus(); 
+    checkStatus();
   });
 }
 
@@ -30,8 +49,11 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 chrome.action.onClicked.addListener(async () => {
   try {
+    await ensureStateLoaded();
+    const version = cachedState.version === "old" ? "old" : "new";
+    const targetUrl = cachedState.lastTotal > 0 ? URLS[version].messages : URLS[version].home;
     await clearCountsAndBadge();
-    await openOrFocusHomeTab();
+    await openOrFocusUrl(targetUrl);
   } catch (error) {
     console.error(error);
   }
@@ -45,24 +67,24 @@ async function checkStatus() {
   try {
     await ensureStateLoaded();
     const htmlRes = await fetch(CHECK_URL, {
-        credentials: 'include',
-        cache: 'no-store',
-        headers: {
-            'X-Uestc-Bbs': '1',
-            'Referer': BBS_ROOT
-        }
+      credentials: 'include',
+      cache: 'no-store',
+      headers: {
+        'X-Uestc-Bbs': '1',
+        'Referer': BBS_ROOT
+      }
     });
-    
+
     if (!htmlRes.ok) {
-        updateBadge("?", "#999999");
-        return;
+      updateBadge("?", "#999999");
+      return;
     }
 
     const htmlText = await htmlRes.text();
 
     if (!htmlText.includes("action=logout")) {
-        updateBadge("未登录", "#999999");
-        return;
+      updateBadge("未登录", "#999999");
+      return;
     }
 
     let promptCount = 0;
@@ -70,20 +92,21 @@ async function checkStatus() {
 
     const promptMatch = htmlText.match(/id="myprompt"[^>]*>.*?\((\d+)\)/);
     if (promptMatch && promptMatch[1]) {
-        promptCount = parseInt(promptMatch[1]);
+      promptCount = parseInt(promptMatch[1]);
     }
 
     const pmHasNew = /id="pm_ntc"[^>]*class="[^"]*\bnew\b"/.test(htmlText);
     if (pmHasNew) {
-        pmCount = 1; 
+      pmCount = 1;
     }
 
     const total = promptCount + pmCount;
+    await persistState({ ...cachedState, lastTotal: total });
 
     if (total > 0) {
-        updateBadge(total.toString(), "#00FF00");
+      updateBadge(total.toString(), "#00FF00");
     } else {
-        updateBadge("", "#000000"); 
+      updateBadge("", "#000000");
     }
 
     await maybeNotify(total, promptCount, pmCount);
@@ -101,8 +124,10 @@ function updateBadge(text, color) {
 
 async function handleNotificationClick(notificationId) {
   try {
+    await ensureStateLoaded();
+    const version = cachedState.version === "old" ? "old" : "new";
     await clearCountsAndBadge();
-    await openOrFocusHomeTab();
+    await openOrFocusUrl(URLS[version].messages);
   } finally {
     chrome.notifications.clear(notificationId);
   }
@@ -110,13 +135,13 @@ async function handleNotificationClick(notificationId) {
 
 async function ensureStateLoaded() {
   if (stateReady) return;
-  cachedState = await chrome.storage.local.get(STATE_DEFAULTS);
+  const storedState = await chrome.storage.local.get(STATE_DEFAULTS);
+  cachedState = { ...STATE_DEFAULTS, ...storedState };
   stateReady = true;
 }
 
 async function persistState(nextState) {
   cachedState = nextState;
-  stateReady = true;
   await chrome.storage.local.set(nextState);
 }
 
@@ -127,17 +152,7 @@ async function clearCountsAndBadge() {
 }
 
 async function maybeNotify(total, promptCount, pmCount) {
-  const currentState = cachedState;
-
-  if (total <= 0) {
-    if (currentState.lastTotal !== 0) await persistState({ ...currentState, lastTotal: 0 });
-    return;
-  }
-
-  if (currentState.lastTotal === total) return;
-
-  if (!currentState.notificationsEnabled) {
-    await persistState({ ...currentState, lastTotal: total });
+  if (total <= 0 || total === cachedState.lastTotal || !cachedState.notificationsEnabled) {
     return;
   }
 
@@ -154,25 +169,16 @@ async function maybeNotify(total, promptCount, pmCount) {
     priority: 2,
     eventTime: Date.now()
   });
-
-  await persistState({ ...currentState, lastTotal: total });
 }
 
-async function openOrFocusHomeTab() {
-  const tabs = await chrome.tabs.query({ url: `${BBS_ROOT}*` });
-  const homeTab = tabs.find((tab) => isHomeTabUrl(tab.url));
+async function openOrFocusUrl(targetUrl) {
+  const tabs = await chrome.tabs.query({ url: targetUrl });
 
-  if (homeTab && homeTab.id !== undefined) {
-    await chrome.tabs.update(homeTab.id, { active: true });
-    await chrome.windows.update(homeTab.windowId, { focused: true });
-    return;
+  if (tabs.length > 0 && tabs[0].id) {
+    const tab = tabs[0];
+    await chrome.tabs.update(tab.id, { active: true });
+    await chrome.windows.update(tab.windowId, { focused: true });
+  } else {
+    await chrome.tabs.create({ url: targetUrl });
   }
-
-  await chrome.tabs.create({ url: HOME_URL });
-}
-
-function isHomeTabUrl(url) {
-  if (!url) return false;
-  if (url === HOME_URL || url.startsWith(`${HOME_URL}/`)) return true;
-  return url === BBS_ROOT || url.startsWith(`${BBS_ROOT}forum.php`);
 }
