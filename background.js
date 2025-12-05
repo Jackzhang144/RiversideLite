@@ -208,7 +208,7 @@ async function maybeNotify(total, promptCount, pmCount, previousTotal) {
     if (items.length) {
       lines.push(
         ...items.slice(0, 3).map((item) => {
-          const title = item.subject || item.summary || "";
+          const title = normalizeText(item.subject || item.summary || "");
           const body = stripHtml(item.summary || item.html_message || "");
           return [title, body].filter(Boolean).join(" - ").slice(0, 140);
         })
@@ -217,8 +217,8 @@ async function maybeNotify(total, promptCount, pmCount, previousTotal) {
     if (chats.length) {
       lines.push(
         ...chats.slice(0, 2).map((chat) => {
-          const title = chat.subject || chat.to_username || chat.last_author || "站内信";
-          const body = chat.last_summary || "";
+          const title = normalizeText(chat.subject || chat.to_username || chat.last_author || "站内信");
+          const body = stripHtml(chat.last_summary || "");
           return [title, body].filter(Boolean).join(" - ").slice(0, 140);
         })
       );
@@ -264,8 +264,15 @@ function buildNotifyFallback(promptCount, pmCount) {
   return parts.join("，") || "收到新的站内消息";
 }
 
+function normalizeText(raw) {
+  if (!raw) return "";
+  return raw.replace(/&nbsp;?/gi, " ").replace(/\u00a0/g, " ").trim();
+}
+
 function stripHtml(raw) {
-  return raw ? raw.replace(/<[^>]+>/g, "") : "";
+  if (!raw) return "";
+  const text = raw.replace(/<[^>]+>/g, " ");
+  return normalizeText(text);
 }
 
 async function openOrFocusUrl(targetUrl) {

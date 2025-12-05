@@ -62,11 +62,12 @@ function renderLists(notifications, chats, chatCount) {
         container.addEventListener("click", () => openChat(chat));
         const title = document.createElement("div");
         title.className = "title";
-        const author = chat.to_username || chat.last_author || "";
-        title.textContent = [author, chat.subject || "查看站内信"].filter(Boolean).join(" · ");
+        const author = normalizeText(chat.to_username || chat.last_author || "");
+        const subject = normalizeText(chat.subject || "查看站内信");
+        title.textContent = [author, subject].filter(Boolean).join(" · ");
         const summary = document.createElement("div");
         summary.className = "summary";
-        summary.textContent = sliceText(chat.last_summary || "", 120);
+        summary.textContent = sliceText(normalizeText(chat.last_summary || ""), 120);
         container.appendChild(title);
         container.appendChild(summary);
         LIST.appendChild(container);
@@ -92,7 +93,7 @@ function renderLists(notifications, chats, chatCount) {
 
       const title = document.createElement("div");
       title.className = "title";
-      title.textContent = item.subject || "查看详情";
+      title.textContent = normalizeText(item.subject || "查看详情");
 
       const summary = document.createElement("div");
       summary.className = "summary";
@@ -128,10 +129,15 @@ function setStatus(text, isError = false) {
   STATUS.className = isError ? "error" : "";
 }
 
+function normalizeText(text) {
+  return (text || "").replace(/&nbsp;?/gi, " ").replace(/\u00a0/g, " ").trim();
+}
+
 function stripHtml(html) {
+  if (!html) return "";
   const div = document.createElement("div");
   div.innerHTML = html;
-  return div.textContent || "";
+  return normalizeText(div.textContent || "");
 }
 
 function sliceText(text, max = 120) {
