@@ -185,6 +185,11 @@ async function openItem(item, container) {
     return;
   }
 
+  if (isTaskCompletionNotification(item)) {
+    // 任务完成提示无需跳转
+    return;
+  }
+
   const url =
     item.kind === "report" || /有新的举报等待处理/.test(item.summary || item.html_message || "")
       ? "https://bbs.uestc.edu.cn/forum.php?mod=modcp&action=report"
@@ -203,6 +208,11 @@ function isRateNotification(item) {
   if (item?.kind === "rate") return true;
   const text = stripHtml([item?.summary, item?.html_message, item?.subject].filter(Boolean).join(" "));
   return /帖子.*被.*评分/.test(text);
+}
+
+function isTaskCompletionNotification(item) {
+  const text = stripHtml([item?.subject, item?.summary, item?.html_message].filter(Boolean).join(" "));
+  return text.includes("恭喜您完成任务");
 }
 
 function openChat(chat) {
