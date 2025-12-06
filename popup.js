@@ -11,12 +11,12 @@ const CHAT_URL_NEW_BASE = "https://bbs.uestc.edu.cn/messages/chat";
 const CHAT_URL_OLD_BASE = "https://bbs.uestc.edu.cn/home.php?mod=space&do=pm";
 let currentVersion = "new";
 
+HOME_BTN?.addEventListener("click", openHome);
 init();
 
 function init() {
   chrome.storage.local.get({ version: "new" }, ({ version }) => {
     currentVersion = version === "old" ? "old" : "new";
-    HOME_BTN?.addEventListener("click", openHome);
     fetchSummary().catch((error) => {
       console.error(error);
       setStatus("加载失败，请检查是否已登录。", true);
