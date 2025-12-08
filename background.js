@@ -113,8 +113,13 @@ async function checkStatus() {
 
   } catch (error) {
     console.error(error);
-    if ((error?.message || "").includes("401")) {
+    const statusCode = getErrorStatusCode(error);
+    if (statusCode === 401) {
       updateBadge("未登录", "#999999");
+      return;
+    }
+    if (statusCode) {
+      updateBadge(String(statusCode), "#FF0000");
     } else {
       updateBadge("ERR", "#FF0000");
     }
@@ -152,6 +157,15 @@ async function refreshAndShow() {
 function updateBadge(text, color) {
   chrome.action.setBadgeText({ text: text });
   chrome.action.setBadgeBackgroundColor({ color: color });
+}
+
+function getErrorStatusCode(error) {
+  if (!error) return null;
+  if (typeof error.status === "number") return error.status;
+  const match = (error?.message || "").match(/\b(\d{3})\b/);
+  if (!match) return null;
+  const code = Number(match[1]);
+  return Number.isNaN(code) ? null : code;
 }
 
 async function handleNotificationClick(notificationId) {
@@ -478,7 +492,7 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
       .then((data) => sendResponse({ ok: true, data }))
       .catch((error) => {
         console.error(error);
-        sendResponse({ ok: false, error: error?.message || "unknown" });
+        sendResponse({ ok: false, error: error?.message || "unknown", status: error?.status });
       });
     return true;
   }
@@ -520,7 +534,9 @@ async function fetchSummaryApi() {
     const pageData = await fetchSummaryViaPage();
     if (pageData) return pageData;
   }
-  throw new Error(`summary status ${res.status}`);
+  const error = new Error(`summary status ${res.status}`);
+  error.status = res.status;
+  throw error;
 }
 
 async function markNotificationRead(id, kind) {

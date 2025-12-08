@@ -26,19 +26,31 @@ function init() {
 
 async function fetchSummary() {
   setStatus("加载中...");
-  const { ok, data, error } = await chrome.runtime.sendMessage({
+  const { ok, data, error, status } = await chrome.runtime.sendMessage({
     type: "fetchSummary",
   });
   if (!ok) {
-    if (error?.includes("401")) {
-      throw new Error("未登录或登录已失效，请先在站点登录后重试。");
+    const code = status || extractStatusCode(error);
+    if (code === 401) {
+      setStatus("未登录或登录已失效，请先在站点登录后重试。", true);
+      return;
     }
-    throw new Error(error || "summary request failed");
+    if (code === 403) {
+      setStatus("已关闭外网访问", true);
+      return;
+    }
+    setStatus(code ? `加载失败（${code}）` : "加载失败，请稍后重试。", true);
+    return;
   }
 
   // API 响应包裹了 code/message? 兼容直接取 data.data/new_notifications
   if (data?.code && data.code !== 0) {
-    throw new Error(`summary api error: ${data.code}`);
+    if (data.code === 403) {
+      setStatus("已关闭外网访问", true);
+      return;
+    }
+    setStatus(`加载失败（${data.code}）`, true);
+    return;
   }
 
   const payload = data?.data && data.code !== undefined ? data.data : data;
@@ -127,6 +139,14 @@ function renderLists(notifications, chats, chatCount) {
 function setStatus(text, isError = false) {
   STATUS.textContent = text;
   STATUS.className = isError ? "error" : "";
+}
+
+function extractStatusCode(raw) {
+  if (!raw) return null;
+  const match = String(raw).match(/\b(\d{3})\b/);
+  if (!match) return null;
+  const code = Number(match[1]);
+  return Number.isNaN(code) ? null : code;
 }
 
 function normalizeText(text) {
