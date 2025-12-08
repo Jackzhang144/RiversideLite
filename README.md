@@ -6,7 +6,8 @@ Chrome 扩展，用于在清水河畔论坛收到提醒与站内信时实时显�
 - 徽标与桌面通知：后台定时轮询，显示未读提醒与站内信数量，点击通知或弹窗项直接打开对应帖子/私信。
 - 弹窗摘要：`popup.html`/`popup.js` 展示新提醒与私信摘要，支持“标记已读”。
 - 版本切换：在选项页选择“新版/旧版”界面，决定跳转链接与主页入口。
-- 权限：仅请求 `bbs.uestc.edu.cn` 域名、cookies、storage、notifications、alarms、scripting 等运行所需权限。
+- 域名切换：可在选项页选择默认域名或“代理河畔”（`bbs.uestcer.org`）以适配不同网络环境。
+- 权限：请求 `bbs.uestc.edu.cn` 与 `bbs.uestcer.org` 域名、cookies、storage、notifications、alarms、scripting 等运行所需权限。
 
 ## 安装与使用
 1. 打开 `chrome://extensions`，启用“开发者模式”。

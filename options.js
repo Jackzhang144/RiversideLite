@@ -1,10 +1,13 @@
 const notificationsToggle = document.getElementById("notificationsToggle");
 const versionNewRadio = document.getElementById("versionNew");
 const versionOldRadio = document.getElementById("versionOld");
+const domainBbsRadio = document.getElementById("domainBbs");
+const domainBbeRadio = document.getElementById("domainBbe");
 const meowToggle = document.getElementById("meowToggle");
 const meowNicknameInput = document.getElementById("meowNickname");
 const meowTestBtn = document.getElementById("meowTestBtn");
 const meowTestStatus = document.getElementById("meowTestStatus");
+const meowLinkToggle = document.getElementById("meowLinkToggle");
 
 function sendMessagePromise(message) {
   return new Promise((resolve, reject) => {
@@ -22,8 +25,10 @@ function sendMessagePromise(message) {
 const DEFAULTS = {
   notificationsEnabled: true,
   version: "new", // Default to new version
+  domain: "bbs",
   meowPushEnabled: false,
   meowNickname: "",
+  meowIncludeLink: true,
 };
 
 function init() {
@@ -31,12 +36,19 @@ function init() {
   chrome.storage.local.get(DEFAULTS, (items) => {
     notificationsToggle.checked = Boolean(items.notificationsEnabled);
     meowToggle.checked = Boolean(items.meowPushEnabled);
+    meowLinkToggle.checked = Boolean(items.meowIncludeLink);
     meowNicknameInput.value = items.meowNickname || "";
     meowNicknameInput.disabled = !meowToggle.checked;
+    meowLinkToggle.disabled = !meowToggle.checked;
     if (items.version === "old") {
       versionOldRadio.checked = true;
     } else {
       versionNewRadio.checked = true;
+    }
+    if (items.domain === "bbe") {
+      domainBbeRadio.checked = true;
+    } else {
+      domainBbsRadio.checked = true;
     }
   });
 
@@ -58,9 +70,26 @@ function init() {
     }
   });
 
+  domainBbsRadio.addEventListener("change", () => {
+    if (domainBbsRadio.checked) {
+      chrome.storage.local.set({ domain: "bbs" });
+    }
+  });
+
+  domainBbeRadio.addEventListener("change", () => {
+    if (domainBbeRadio.checked) {
+      chrome.storage.local.set({ domain: "bbe" });
+    }
+  });
+
   meowToggle.addEventListener("change", () => {
     chrome.storage.local.set({ meowPushEnabled: meowToggle.checked });
     meowNicknameInput.disabled = !meowToggle.checked;
+    meowLinkToggle.disabled = !meowToggle.checked;
+  });
+
+  meowLinkToggle.addEventListener("change", () => {
+    chrome.storage.local.set({ meowIncludeLink: meowLinkToggle.checked });
   });
 
   meowNicknameInput.addEventListener("change", () => {

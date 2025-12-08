@@ -1,34 +1,21 @@
-const BBS_ROOT = "https://bbs.uestc.edu.cn/";
-const CHECK_URL = "https://bbs.uestc.edu.cn/home.php?mod=space";
-const CHECK_INTERVAL_MINUTES = 1;
-const API_BASE = "https://bbs.uestc.edu.cn/_";
-const SUMMARY_URL = `${API_BASE}/messages/summary`;
-const READ_URL = (id, kind) =>
-  `${API_BASE}/messages/notifications/read/${id}${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`;
-const MEO_W_BASE = "https://api.chuckfang.com";
-const THREAD_URL_NEW = (threadId) => `https://bbs.uestc.edu.cn/thread/${threadId}`;
-const THREAD_URL_OLD = (threadId) =>
-  `https://bbs.uestc.edu.cn/forum.php?mod=viewthread&tid=${threadId}`;
-const CHAT_URL_OLD_BASE = "https://bbs.uestc.edu.cn/home.php?mod=space&do=pm";
-
-const URLS = {
-  new: {
-    home: "https://bbs.uestc.edu.cn/new",
-    messages: "https://bbs.uestc.edu.cn/messages/posts",
-  },
-  old: {
-    home: "https://bbs.uestc.edu.cn/forum.php",
-    messages: "https://bbs.uestc.edu.cn/home.php?mod=space&do=notice",
-  },
+const DOMAIN_MAP = {
+  bbs: "bbs.uestc.edu.cn",
+  bbe: "bbs.uestcer.org",
 };
+const HOST_PATTERNS = Object.values(DOMAIN_MAP).map((host) => `*://${host}/*`);
+const CHECK_INTERVAL_MINUTES = 1;
+const MEO_W_BASE = "https://api.chuckfang.com";
 
 const STATE_DEFAULTS = {
   lastTotal: 0,
   notificationsEnabled: true,
   version: "new",
+  domain: "bbs",
   authorizationHeader: "",
+  authDomain: "",
   meowPushEnabled: false,
   meowNickname: "",
+  meowIncludeLink: true,
 };
 
 let cachedState = { ...STATE_DEFAULTS };
@@ -36,6 +23,32 @@ let stateReady = false;
 let adoptPromise = null;
 
 const log = (...args) => console.log("[RiversideLite]", ...args);
+
+const getDomainKey = () => (DOMAIN_MAP[cachedState.domain] ? cachedState.domain : "bbs");
+const getDomainHost = () => DOMAIN_MAP[getDomainKey()];
+const getOrigin = () => `https://${getDomainHost()}`;
+const withOrigin = (path = "") => {
+  if (!path) return `${getOrigin()}/`;
+  return path.startsWith("/") ? `${getOrigin()}${path}` : `${getOrigin()}/${path}`;
+};
+const getApiBase = () => withOrigin("_");
+const getSummaryUrl = () => `${getApiBase()}/messages/summary`;
+const getReadUrl = (id, kind) =>
+  `${getApiBase()}/messages/notifications/read/${id}${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`;
+const getThreadUrlNew = (threadId) => withOrigin(`thread/${threadId}`);
+const getThreadUrlOld = (threadId) => withOrigin(`forum.php?mod=viewthread&tid=${threadId}`);
+const getLegacyChatUrlBase = () => withOrigin("home.php?mod=space&do=pm");
+const getModcpReportUrl = () => withOrigin("forum.php?mod=modcp&action=report");
+const getUrlMap = () => ({
+  new: {
+    home: withOrigin("new"),
+    messages: withOrigin("messages/posts"),
+  },
+  old: {
+    home: withOrigin("forum.php"),
+    messages: withOrigin("home.php?mod=space&do=notice"),
+  },
+});
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
@@ -45,14 +58,25 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes.version && typeof changes.version.newValue !== "undefined") {
     cachedState.version = changes.version.newValue;
   }
+  if (changes.domain && typeof changes.domain.newValue !== "undefined") {
+    cachedState.domain = changes.domain.newValue;
+    cachedState.authorizationHeader = "";
+    cachedState.authDomain = "";
+  }
   if (changes.authorizationHeader && typeof changes.authorizationHeader.newValue !== "undefined") {
     cachedState.authorizationHeader = changes.authorizationHeader.newValue || "";
+  }
+  if (changes.authDomain && typeof changes.authDomain.newValue !== "undefined") {
+    cachedState.authDomain = changes.authDomain.newValue || "";
   }
   if (changes.meowPushEnabled && typeof changes.meowPushEnabled.newValue !== "undefined") {
     cachedState.meowPushEnabled = Boolean(changes.meowPushEnabled.newValue);
   }
   if (changes.meowNickname && typeof changes.meowNickname.newValue !== "undefined") {
     cachedState.meowNickname = changes.meowNickname.newValue || "";
+  }
+  if (changes.meowIncludeLink && typeof changes.meowIncludeLink.newValue !== "undefined") {
+    cachedState.meowIncludeLink = Boolean(changes.meowIncludeLink.newValue);
   }
 });
 
@@ -158,8 +182,9 @@ async function handleNotificationClick(notificationId) {
   try {
     await ensureStateLoaded();
     const version = cachedState.version === "old" ? "old" : "new";
+    const urls = getUrlMap();
     await clearCountsAndBadge();
-    await openOrFocusUrl(URLS[version].messages);
+    await openOrFocusUrl(urls[version].messages);
   } finally {
     chrome.notifications.clear(notificationId);
   }
@@ -173,9 +198,19 @@ async function ensureStateLoaded() {
 }
 
 async function ensureMeowDefaultPersisted() {
-  const { meowPushEnabled } = await chrome.storage.local.get(["meowPushEnabled"]);
+  const { meowPushEnabled, meowIncludeLink } = await chrome.storage.local.get([
+    "meowPushEnabled",
+    "meowIncludeLink",
+  ]);
+  const updates = {};
   if (typeof meowPushEnabled === "undefined") {
-    await chrome.storage.local.set({ meowPushEnabled: false });
+    updates.meowPushEnabled = false;
+  }
+  if (typeof meowIncludeLink === "undefined") {
+    updates.meowIncludeLink = true;
+  }
+  if (Object.keys(updates).length) {
+    await chrome.storage.local.set(updates);
   }
 }
 
@@ -302,19 +337,23 @@ async function maybeSendMeowPush(message, total, options = {}) {
   const content = message || "收到新的站内消息";
   const title = total > 0 ? `清水河畔 ${total} 条新提醒` : "清水河畔助手提醒";
   const version = cachedState.version === "old" ? "old" : "new";
-  const finalTarget = targetUrl || URLS[version].messages;
+  const shouldAttachLink = cachedState.meowIncludeLink !== false;
+  const urls = getUrlMap();
+  const finalTarget = shouldAttachLink ? (targetUrl || urls[version].messages) : "";
   const endpoint = new URL(`${MEO_W_BASE}/${encodeURIComponent(nickname)}/${encodeURIComponent(title)}`);
   endpoint.searchParams.set("msgType", "text");
   const body = new URLSearchParams();
   body.set("title", title);
   body.set("msg", content);
-  body.set("url", finalTarget);
+  if (shouldAttachLink && finalTarget) {
+    body.set("url", finalTarget);
+  }
 
   try {
     log("MeoW push request", {
       endpoint: endpoint.toString(),
       title,
-      targetUrl: finalTarget,
+      targetUrl: shouldAttachLink ? finalTarget : "disabled",
       contentLength: content.length,
     });
     const res = await fetch(endpoint.toString(), {
@@ -351,7 +390,8 @@ function buildNotificationText(item) {
 }
 
 function buildMeowTarget(payload, version) {
-  const fallback = version === "old" ? URLS.old.messages : URLS.new.messages;
+  const urls = getUrlMap();
+  const fallback = version === "old" ? urls.old.messages : urls.new.messages;
   if (!payload) return fallback;
   const items = Array.isArray(payload?.new_notifications) ? payload.new_notifications : [];
   const chats = Array.isArray(payload?.new_chats) ? payload.new_chats : [];
@@ -380,16 +420,17 @@ function buildNotificationTarget(item, version, fallback) {
   if (isRateNotification(item) || isTaskCompletionNotification(item)) return "";
   const summaryText = stripHtml([item?.summary, item?.html_message, item?.subject].filter(Boolean).join(" "));
   if (item.kind === "report" || /有新的举报等待处理/.test(summaryText)) {
-    return "https://bbs.uestc.edu.cn/forum.php?mod=modcp&action=report";
+    return getModcpReportUrl();
   }
   if (item.thread_id) {
-    return version === "old" ? THREAD_URL_OLD(item.thread_id) : THREAD_URL_NEW(item.thread_id);
+    return version === "old" ? getThreadUrlOld(item.thread_id) : getThreadUrlNew(item.thread_id);
   }
   return fallback;
 }
 
 function buildMeowPayloads(payload, version, fallbackText, fallbackTarget) {
-  const fallback = fallbackTarget || (version === "old" ? URLS.old.messages : URLS.new.messages);
+  const urls = getUrlMap();
+  const fallback = fallbackTarget || (version === "old" ? urls.old.messages : urls.new.messages);
   const results = [];
   if (payload) {
     const items = Array.isArray(payload?.new_notifications) ? payload.new_notifications : [];
@@ -430,13 +471,14 @@ function isTaskCompletionNotification(item) {
 }
 
 function buildLegacyChatUrl(chat) {
+  const base = getLegacyChatUrlBase();
   if (chat?.to_uid) {
-    return `${CHAT_URL_OLD_BASE}&subop=view&touid=${chat.to_uid}#last`;
+    return `${base}&subop=view&touid=${chat.to_uid}#last`;
   }
   if (chat?.conversation_id) {
-    return `${CHAT_URL_OLD_BASE}&subop=view&plid=${chat.conversation_id}&type=1#last`;
+    return `${base}&subop=view&plid=${chat.conversation_id}&type=1#last`;
   }
-  return CHAT_URL_OLD_BASE;
+  return base;
 }
 
 async function sendMeowTest() {
@@ -513,7 +555,7 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
 });
 
 async function fetchSummaryApi() {
-  const res = await callApiWithAuth("GET", SUMMARY_URL);
+  const res = await callApiWithAuth("GET", getSummaryUrl());
   if (res.ok) return res.json();
   log("summary primary failed", res.status);
   if (res.status === 401) {
@@ -524,7 +566,7 @@ async function fetchSummaryApi() {
 }
 
 async function markNotificationRead(id, kind) {
-  const res = await callApiWithAuth("POST", READ_URL(id, kind));
+  const res = await callApiWithAuth("POST", getReadUrl(id, kind));
   if (res.ok) return;
   log("mark read primary failed", res.status);
   if (res.status === 401) {
@@ -536,16 +578,20 @@ async function markNotificationRead(id, kind) {
 
 async function callApiWithAuth(method, url) {
   await ensureStateLoaded();
-  if (!cachedState.authorizationHeader) {
+  const currentHost = getDomainHost();
+  const hasValidAuth =
+    cachedState.authorizationHeader && cachedState.authDomain === currentHost;
+
+  if (!hasValidAuth) {
     const auth = await readAuthorizationFromPage();
     if (auth) {
       log("loaded auth from page");
-      await persistState({ ...cachedState, authorizationHeader: auth });
+      await persistState({ ...cachedState, authorizationHeader: auth, authDomain: currentHost });
     }
   }
   const headers = {
     "X-UESTC-BBS": "1",
-    Referer: BBS_ROOT,
+    Referer: withOrigin(),
   };
   if (cachedState.authorizationHeader) {
     headers["Authorization"] = cachedState.authorizationHeader;
@@ -559,16 +605,16 @@ async function callApiWithAuth(method, url) {
     });
 
   let res = await doFetch();
-  if (res.status === 401) {
+  if (res.status === 401 || res.status === 403) {
     log("api 401, retrying with fresh auth");
     const freshAuth = await readAuthorizationFromPage();
     if (freshAuth && freshAuth !== cachedState.authorizationHeader) {
-      await persistState({ ...cachedState, authorizationHeader: freshAuth });
+      await persistState({ ...cachedState, authorizationHeader: freshAuth, authDomain: currentHost });
       headers["Authorization"] = freshAuth;
       res = await doFetch();
     }
   }
-  if (res.status === 401 && !cachedState.authorizationHeader) {
+  if ((res.status === 401 || res.status === 403) && !cachedState.authorizationHeader) {
     const adopted = await ensureAuthorization();
     if (adopted) {
       headers["Authorization"] = cachedState.authorizationHeader;
@@ -592,10 +638,10 @@ async function adoptLegacyAuth() {
   try {
     const headers = {
       "X-UESTC-BBS": "1",
-      Referer: BBS_ROOT,
+      Referer: withOrigin(),
     };
 
-    const res = await fetch(`${API_BASE}/auth/adoptLegacyAuth`, {
+    const res = await fetch(`${getApiBase()}/auth/adoptLegacyAuth`, {
       method: "POST",
       credentials: "include",
       cache: "no-store",
@@ -606,7 +652,11 @@ async function adoptLegacyAuth() {
     const auth = data?.data?.authorization || data?.authorization;
     if (auth) {
       log("adoptLegacyAuth succeeded");
-      await persistState({ ...cachedState, authorizationHeader: auth });
+      await persistState({
+        ...cachedState,
+        authorizationHeader: auth,
+        authDomain: getDomainHost(),
+      });
       return true;
     }
   } catch (error) {
@@ -633,6 +683,13 @@ async function readAuthorizationFromPage() {
   });
   const value = (result && typeof result.result === "string" && result.result) || "";
   log("read auth from page length", value.length);
+  if (value) {
+    await persistState({
+      ...cachedState,
+      authorizationHeader: value,
+      authDomain: getDomainHost(),
+    });
+  }
   return value;
 }
 
@@ -707,8 +764,10 @@ async function markReadViaPage(id, kind) {
 }
 
 async function getAnyBbsTab() {
-  const tabs = await chrome.tabs.query({
-    url: ["*://bbs.uestc.edu.cn/*"],
-  });
+  await ensureStateLoaded();
+  const preferredPattern = `*://${getDomainHost()}/*`;
+  const preferred = await chrome.tabs.query({ url: [preferredPattern] });
+  if (preferred[0]) return preferred[0];
+  const tabs = await chrome.tabs.query({ url: HOST_PATTERNS });
   return tabs[0];
 }

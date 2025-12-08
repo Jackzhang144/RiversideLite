@@ -23,6 +23,7 @@
   ],
   "host_permissions": [
     "*://bbs.uestc.edu.cn/*",
+    "*://bbs.uestcer.org/*",
     "https://api.chuckfang.com/*"
   ],
   "background": {

@@ -2,21 +2,36 @@ const STATUS = document.getElementById("status");
 const LIST = document.getElementById("list");
 const HOME_BTN = document.getElementById("homeBtn");
 
-const THREAD_URL_NEW = (threadId) => `https://bbs.uestc.edu.cn/thread/${threadId}`;
-const THREAD_URL_OLD = (threadId) =>
-  `https://bbs.uestc.edu.cn/forum.php?mod=viewthread&tid=${threadId}`;
-const FALLBACK_URL_NEW = "https://bbs.uestc.edu.cn/messages/posts";
-const FALLBACK_URL_OLD = "https://bbs.uestc.edu.cn/home.php?mod=space&do=notice";
-const CHAT_URL_NEW_BASE = "https://bbs.uestc.edu.cn/messages/chat";
-const CHAT_URL_OLD_BASE = "https://bbs.uestc.edu.cn/home.php?mod=space&do=pm";
+const DOMAIN_MAP = {
+  bbs: "bbs.uestc.edu.cn",
+  bbe: "bbs.uestcer.org",
+};
 let currentVersion = "new";
+let currentDomain = "bbs";
+
+const getHost = () => DOMAIN_MAP[currentDomain] || DOMAIN_MAP.bbs;
+const withOrigin = (path = "") => {
+  const origin = `https://${getHost()}`;
+  if (!path) return `${origin}/`;
+  return path.startsWith("/") ? `${origin}${path}` : `${origin}/${path}`;
+};
+const THREAD_URL_NEW = (threadId) => withOrigin(`thread/${threadId}`);
+const THREAD_URL_OLD = (threadId) => withOrigin(`forum.php?mod=viewthread&tid=${threadId}`);
+const FALLBACK_URL_NEW = () => withOrigin("messages/posts");
+const FALLBACK_URL_OLD = () => withOrigin("home.php?mod=space&do=notice");
+const CHAT_URL_OLD_BASE = () => withOrigin("home.php?mod=space&do=pm");
+const getUrlMap = () => ({
+  new: { home: withOrigin("new"), messages: FALLBACK_URL_NEW() },
+  old: { home: withOrigin("forum.php"), messages: FALLBACK_URL_OLD() },
+});
 
 HOME_BTN?.addEventListener("click", openHome);
 init();
 
 function init() {
-  chrome.storage.local.get({ version: "new" }, ({ version }) => {
+  chrome.storage.local.get({ version: "new", domain: "bbs" }, ({ version, domain }) => {
     currentVersion = version === "old" ? "old" : "new";
+    currentDomain = DOMAIN_MAP[domain] ? domain : "bbs";
     fetchSummary().catch((error) => {
       console.error(error);
       setStatus("加载失败，请检查是否已登录。", true);
@@ -192,14 +207,14 @@ async function openItem(item, container) {
 
   const url =
     item.kind === "report" || /有新的举报等待处理/.test(item.summary || item.html_message || "")
-      ? "https://bbs.uestc.edu.cn/forum.php?mod=modcp&action=report"
+      ? withOrigin("forum.php?mod=modcp&action=report")
       : item.thread_id
       ? useOld
         ? THREAD_URL_OLD(item.thread_id)
         : THREAD_URL_NEW(item.thread_id)
       : useOld
-      ? FALLBACK_URL_OLD
-      : FALLBACK_URL_NEW;
+      ? FALLBACK_URL_OLD()
+      : FALLBACK_URL_NEW();
   chrome.tabs.create({ url });
   window.close();
 }
@@ -230,19 +245,21 @@ function openChat(chat) {
 // }
 
 function buildLegacyChatUrl(chat) {
+  const base = CHAT_URL_OLD_BASE();
   if (chat?.to_uid) {
-    return `${CHAT_URL_OLD_BASE}&subop=view&touid=${chat.to_uid}#last`;
+    return `${base}&subop=view&touid=${chat.to_uid}#last`;
   }
   if (chat?.conversation_id) {
-    return `${CHAT_URL_OLD_BASE}&subop=view&plid=${chat.conversation_id}&type=1#last`;
+    return `${base}&subop=view&plid=${chat.conversation_id}&type=1#last`;
   }
-  return CHAT_URL_OLD_BASE;
+  return base;
 }
 
 async function openHome() {
   try {
-    const url = currentVersion === "old" ? "https://bbs.uestc.edu.cn/forum.php" : "https://bbs.uestc.edu.cn/new";
-    const matched = await chrome.tabs.query({ url: `${url}*` });
+    const urls = getUrlMap();
+    const url = currentVersion === "old" ? urls.old.home : urls.new.home;
+    const matched = await chrome.tabs.query({ url: [`${url}*`] });
     if (matched.length && matched[0].id) {
       const tab = matched[0];
       await chrome.tabs.update(tab.id, { active: true });

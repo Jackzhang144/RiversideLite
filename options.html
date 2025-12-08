@@ -77,17 +77,36 @@
   </div>
 
   <div class="setting-group">
+    <h1>接口域名</h1>
+    <div class="radio-group">
+      <label>
+        <input type="radio" name="domain" value="bbs" id="domainBbs">
+        bbs.uestc.edu.cn（默认）
+      </label>
+      <label>
+        <input type="radio" name="domain" value="bbe" id="domainBbe">
+        代理河畔（bbs.uestcer.org）
+      </label>
+    </div>
+    <p>如遇网络环境限制，可切换到备用域名；切换后请在对应站点保持登录。</p>
+  </div>
+
+  <div class="setting-group">
     <h1>MeoW 推送</h1>
     <p>MeoW 是专为鸿蒙 5.0 及以上打造的消息提醒应用，使用系统级推送，无需后台常驻。</p>
     <label>
       <input type="checkbox" id="meowToggle">
       启用 MeoW 推送
     </label>
+    <label>
+      <input type="checkbox" id="meowLinkToggle">
+      推送附带跳转链接
+    </label>
     <div class="text-row">
       <span>推送昵称</span>
       <input type="text" id="meowNickname" placeholder="请输入在 MeoW 配置的昵称">
     </div>
-    <p>开启后会在有新消息时通过 MeoW 推送提醒，昵称需与 App 中保持一致。</p>
+    <p>开启后会在有新消息时通过 MeoW 推送提醒，昵称需与 App 中保持一致；关闭跳转链接后，MeoW 推送不再附带站内页链接。</p>
     <div class="text-row">
       <span>测试推送</span>
       <button id="meowTestBtn" type="button">发送测试</button>
