@@ -64,6 +64,7 @@ async function fetchSummary() {
 function renderLists(notifications, chats, chatCount) {
   LIST.innerHTML = "";
   setStatus("");
+  HOME_BTN?.classList.remove("hidden");
 
   if (chats.length || chatCount) {
     LIST.appendChild(makeSectionTitle("站内信"));
@@ -137,6 +138,7 @@ function renderLists(notifications, chats, chatCount) {
 }
 
 function setStatus(text, isError = false) {
+  HOME_BTN?.classList.remove("hidden");
   STATUS.innerHTML = "";
   STATUS.textContent = text;
   STATUS.className = isError ? "error" : "";
@@ -286,6 +288,28 @@ function makeSectionTitle(text) {
 
 function renderForbiddenNotice() {
   LIST.innerHTML = "";
-  STATUS.className = "error";
-  STATUS.textContent = "外网访问受限，请在校园网或 WebVPN 环境下访问";
+  HOME_BTN?.classList.add("hidden");
+  STATUS.className = "error status-forbidden";
+  STATUS.innerHTML = `
+    <div class="status-line">外网访问受限，请在校园网或 WebVPN 环境下访问。</div>
+    <div class="status-actions">
+      <button class="link-btn" id="btnWebvpn">WebVPN 跳转</button>
+      <button class="link-btn" id="btnProxy">代理跳转</button>
+    </div>
+  `;
+
+  const useOld = currentVersion === "old";
+  const webvpnUrl = useOld
+    ? "https://webvpn.uestc.edu.cn/https/77726476706e69737468656265737421f2f552d232357b447d468ca88d1b203b/forum.php"
+    : "https://webvpn.uestc.edu.cn/https/77726476706e69737468656265737421f2f552d232357b447d468ca88d1b203b/new";
+  const proxyUrl = useOld ? "https://bbs.uestcer.org/forum.php" : "https://bbs.uestcer.org/new";
+
+  document.getElementById("btnWebvpn")?.addEventListener("click", () => {
+    chrome.tabs.create({ url: webvpnUrl });
+    window.close();
+  });
+  document.getElementById("btnProxy")?.addEventListener("click", () => {
+    chrome.tabs.create({ url: proxyUrl });
+    window.close();
+  });
 }
