@@ -45,6 +45,16 @@
         color: var(--muted);
         margin: 0;
         padding: 6px 0 2px;
+        transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+      }
+      #status.error {
+        margin: 2px 0 4px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #fff6f6;
+        border: 1px solid #ffdada;
+        color: #b20000;
+        box-shadow: 0 8px 18px rgba(178, 0, 0, 0.06);
       }
       .list {
         display: flex;

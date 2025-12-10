@@ -36,7 +36,7 @@ async function fetchSummary() {
       return;
     }
     if (code === 403) {
-      setStatus("已关闭外网访问", true);
+      renderForbiddenNotice();
       return;
     }
     setStatus(code ? `加载失败（${code}）` : "加载失败，请稍后重试。", true);
@@ -46,7 +46,7 @@ async function fetchSummary() {
   // API 响应包裹了 code/message? 兼容直接取 data.data/new_notifications
   if (data?.code && data.code !== 0) {
     if (data.code === 403) {
-      setStatus("已关闭外网访问", true);
+      renderForbiddenNotice();
       return;
     }
     setStatus(`加载失败（${data.code}）`, true);
@@ -137,6 +137,7 @@ function renderLists(notifications, chats, chatCount) {
 }
 
 function setStatus(text, isError = false) {
+  STATUS.innerHTML = "";
   STATUS.textContent = text;
   STATUS.className = isError ? "error" : "";
 }
@@ -281,4 +282,10 @@ function makeSectionTitle(text) {
   div.className = "section-title";
   div.textContent = text;
   return div;
+}
+
+function renderForbiddenNotice() {
+  LIST.innerHTML = "";
+  STATUS.className = "error";
+  STATUS.textContent = "外网访问受限，请在校园网或 WebVPN 环境下访问";
 }
