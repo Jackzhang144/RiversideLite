@@ -4,95 +4,332 @@
   <meta charset="utf-8">
   <title>清水河畔助手设置</title>
   <style>
+    :root {
+      --primary: #1f4c8f;
+      --primary-dark: #153a70;
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --border: #e3e7ef;
+      --text: #1f2a3d;
+      --muted: #6b7380;
+      --shadow: 0 10px 22px rgba(0, 0, 0, 0.08);
+    }
+    * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      margin: 20px;
-      color: #222;
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      padding: 24px 16px 32px;
+      display: flex;
+      justify-content: center;
+    }
+    .page {
+      width: min(760px, 100%);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 20px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
     }
     h1 {
       font-size: 20px;
-      margin-bottom: 12px;
+      margin: 0 0 12px;
+      color: var(--primary);
     }
     .setting-group {
-      margin-bottom: 24px;
+      padding: 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
     label {
-      display: flex;
-      align-items: center;
-      gap: 8px;
       font-size: 16px;
-      margin-bottom: 8px;
+      color: var(--text);
     }
     p {
       margin-top: 0;
-      margin-bottom: 12px;
-      color: #5c5c5c;
-      padding-left: 24px; /* Indent paragraph */
+      margin-bottom: 6px;
+      color: var(--muted);
+      padding-left: 20px;
+      line-height: 1.5;
     }
-    .radio-group label {
-      margin-bottom: 4px;
+    .radio-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding-left: 0;
     }
     .text-row {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
+      gap: 10px;
+      margin-bottom: 10px;
     }
     .text-row span {
-      min-width: 80px;
-      color: #3c3c3c;
+      min-width: 90px;
+      color: var(--text);
+      font-weight: 600;
     }
     .text-row input[type="text"] {
       flex: 1;
-      padding: 6px 8px;
-      border: 1px solid #d0d0d0;
-      border-radius: 6px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
       font-size: 14px;
+      background: #fdfefe;
+      transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+    .text-row input[type="text"]:focus {
+      border-color: #aac4ec;
+      box-shadow: 0 0 0 2px rgba(31, 76, 143, 0.12);
+      outline: none;
+    }
+    button {
+      padding: 8px 14px;
+      border: 1px solid var(--primary);
+      border-radius: 8px;
+      background: var(--primary);
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+    }
+    button:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 14px rgba(31, 76, 143, 0.14);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    #meowTestStatus {
+      padding-left: 20px;
+      margin-top: 0;
+      margin-bottom: 0;
+      color: var(--muted);
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .toggle-wrapper {
+      position: relative;
+      width: 72px;
+      height: 28px;
+      display: inline-block;
+      cursor: pointer;
+    }
+    .toggle-input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: #e8ebf3;
+      border-radius: 14px;
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.04);
+    }
+    .toggle-thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
+      transition: transform 0.2s cubic-bezier(0.8, 0.4, 0.3, 1.25), background 0.15s ease, box-shadow 0.2s ease;
+    }
+    .toggle-thumb::before {
+      content: "";
+      position: absolute;
+      inset: -5px;
+      border-radius: 50%;
+      background: rgba(31, 76, 143, 0.18);
+      transform: scale(0.6);
+      opacity: 0;
+      transition: transform 0.4s ease, opacity 0.4s ease;
+    }
+    .toggle-input:checked + .toggle-track .toggle-thumb {
+      background: #1f4c8f;
+      transform: translateX(42px);
+      box-shadow: 0 3px 8px rgba(31, 76, 143, 0.2);
+    }
+    .toggle-input:checked + .toggle-track {
+      background: rgba(31, 76, 143, 0.14);
+      box-shadow: inset 0 1px 2px rgba(31, 76, 143, 0.2);
+    }
+    .toggle-input:checked + .toggle-track .toggle-thumb::before {
+      transform: scale(1);
+      opacity: 0;
+    }
+    .toggle-text {
+      cursor: pointer;
+      color: var(--text);
+    }
+    .inline-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+    }
+    .status-text {
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .pill {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #f9fafc;
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .pill input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .pill span {
+      pointer-events: none;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .pill:hover {
+      border-color: #cfd8e6;
+      background: #f0f4fb;
+    }
+    .pill input:checked + span {
+      color: #fff;
+    }
+    .pill input:checked ~ .pill-bg {
+      opacity: 1;
+      transform: scale(1);
+    }
+    .pill input:checked ~ .pill-border {
+      border-color: #1f4c8f;
+    }
+    .pill .pill-bg {
+      position: absolute;
+      inset: 0;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #1f4c8f, #153a70);
+      opacity: 0;
+      transform: scale(0.96);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      z-index: 0;
+    }
+    .pill .pill-border {
+      position: absolute;
+      inset: 0;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      pointer-events: none;
+    }
+    .pill span {
+      position: relative;
+      z-index: 1;
     }
   </style>
 </head>
 <body>
-  <div class="setting-group">
-    <h1>通知设置</h1>
-    <label>
-      <input type="checkbox" id="notificationsToggle">
-      启用系统通知
-    </label>
-    <p>关闭后仍会更新徽标，但不会弹出桌面通知。</p>
-  </div>
+  <div class="page">
+    <div class="setting-group">
+      <h1>通知设置</h1>
+      <div class="toggle-row">
+        <label for="notificationsToggle" class="toggle-wrapper">
+          <input type="checkbox" id="notificationsToggle" class="toggle-input">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>
+        <label for="notificationsToggle" class="toggle-text">启用系统通知</label>
+      </div>
+      <p>关闭后仍会更新徽标，但不会弹出桌面通知。</p>
+    </div>
 
-  <div class="setting-group">
-    <h1>版本设置</h1>
-    <div class="radio-group">
-      <label>
-        <input type="radio" name="version" value="new" id="versionNew">
-        新版
-      </label>
-      <label>
-        <input type="radio" name="version" value="old" id="versionOld">
-        旧版
-      </label>
+    <div class="setting-group">
+      <h1>版本设置</h1>
+      <div class="radio-group">
+        <label class="pill">
+          <input type="radio" name="version" value="new" id="versionNew">
+          <span>新版</span>
+          <span class="pill-bg"></span>
+          <span class="pill-border"></span>
+        </label>
+        <label class="pill">
+          <input type="radio" name="version" value="old" id="versionOld">
+          <span>旧版</span>
+          <span class="pill-bg"></span>
+          <span class="pill-border"></span>
+        </label>
+      </div>
+      <p>选择新版或旧版 BBS 界面，将影响点击图标和通知后的跳转链接。</p>
     </div>
-    <p>选择新版或旧版 BBS 界面，将影响点击图标和通知后的跳转链接。</p>
-  </div>
 
-  <div class="setting-group">
-    <h1>MeoW 推送</h1>
-    <p>MeoW 是专为鸿蒙 5.0 及以上打造的消息提醒应用，使用系统级推送，无需后台常驻。</p>
-    <label>
-      <input type="checkbox" id="meowToggle">
-      启用 MeoW 推送
-    </label>
-    <div class="text-row">
-      <span>推送昵称</span>
-      <input type="text" id="meowNickname" placeholder="请输入在 MeoW 配置的昵称">
+    <div class="setting-group">
+      <h1>MeoW 推送</h1>
+      <p>MeoW 是专为鸿蒙 5.0 及以上打造的消息提醒应用，使用系统级推送，无需后台常驻。</p>
+      <div class="toggle-row">
+        <label for="meowToggle" class="toggle-wrapper">
+          <input type="checkbox" id="meowToggle" class="toggle-input">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>
+        <label for="meowToggle" class="toggle-text">启用 MeoW 推送</label>
+      </div>
+      <div class="radio-group" style="margin-left:0;margin-top:6px; gap: 8px;">
+        <label class="pill">
+          <input type="radio" name="meowLinkMode" value="none" id="meowLinkNone">
+          <span>不携带跳转链接</span>
+          <span class="pill-bg"></span>
+          <span class="pill-border"></span>
+        </label>
+        <label class="pill">
+          <input type="radio" name="meowLinkMode" value="list" id="meowLinkList">
+          <span>跳转至消息列表</span>
+          <span class="pill-bg"></span>
+          <span class="pill-border"></span>
+        </label>
+        <label class="pill">
+          <input type="radio" name="meowLinkMode" value="thread" id="meowLinkThread">
+          <span>精准跳转至帖子</span>
+          <span class="pill-bg"></span>
+          <span class="pill-border"></span>
+        </label>
+      </div>
+      <div class="text-row">
+        <span>推送昵称</span>
+        <input type="text" id="meowNickname" placeholder="请输入在 MeoW 配置的昵称">
+      </div>
+      <p>开启后会在有新消息时通过 MeoW 推送提醒，昵称需与 App 中保持一致。可选择是否附带跳转链接。</p>
+      <div class="text-row">
+        <span>测试推送</span>
+        <div class="inline-actions">
+          <button id="meowTestBtn" type="button">发送测试</button>
+          <span id="meowTestStatus" class="status-text"></span>
+        </div>
+      </div>
     </div>
-    <p>开启后会在有新消息时通过 MeoW 推送提醒，昵称需与 App 中保持一致。</p>
-    <div class="text-row">
-      <span>测试推送</span>
-      <button id="meowTestBtn" type="button">发送测试</button>
-    </div>
-    <p id="meowTestStatus" style="padding-left:24px;margin-top:0;margin-bottom:0;color:#3c3c3c;"></p>
   </div>
 
   <script src="options.js"></script>

@@ -5,6 +5,9 @@ const meowToggle = document.getElementById("meowToggle");
 const meowNicknameInput = document.getElementById("meowNickname");
 const meowTestBtn = document.getElementById("meowTestBtn");
 const meowTestStatus = document.getElementById("meowTestStatus");
+const meowLinkNoneRadio = document.getElementById("meowLinkNone");
+const meowLinkListRadio = document.getElementById("meowLinkList");
+const meowLinkThreadRadio = document.getElementById("meowLinkThread");
 
 function sendMessagePromise(message) {
   return new Promise((resolve, reject) => {
@@ -24,6 +27,7 @@ const DEFAULTS = {
   version: "new", // Default to new version
   meowPushEnabled: false,
   meowNickname: "",
+  meowLinkMode: "none",
 };
 
 function init() {
@@ -33,6 +37,14 @@ function init() {
     meowToggle.checked = Boolean(items.meowPushEnabled);
     meowNicknameInput.value = items.meowNickname || "";
     meowNicknameInput.disabled = !meowToggle.checked;
+    const linkMode = items.meowLinkMode || DEFAULTS.meowLinkMode;
+    if (linkMode === "none") {
+      meowLinkNoneRadio.checked = true;
+    } else if (linkMode === "list") {
+      meowLinkListRadio.checked = true;
+    } else {
+      meowLinkThreadRadio.checked = true;
+    }
     if (items.version === "old") {
       versionOldRadio.checked = true;
     } else {
@@ -61,6 +73,24 @@ function init() {
   meowToggle.addEventListener("change", () => {
     chrome.storage.local.set({ meowPushEnabled: meowToggle.checked });
     meowNicknameInput.disabled = !meowToggle.checked;
+  });
+
+  meowLinkNoneRadio.addEventListener("change", () => {
+    if (meowLinkNoneRadio.checked) {
+      chrome.storage.local.set({ meowLinkMode: "none" });
+    }
+  });
+
+  meowLinkListRadio.addEventListener("change", () => {
+    if (meowLinkListRadio.checked) {
+      chrome.storage.local.set({ meowLinkMode: "list" });
+    }
+  });
+
+  meowLinkThreadRadio.addEventListener("change", () => {
+    if (meowLinkThreadRadio.checked) {
+      chrome.storage.local.set({ meowLinkMode: "thread" });
+    }
   });
 
   meowNicknameInput.addEventListener("change", () => {

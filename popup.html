@@ -28,6 +28,7 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
+        position: relative;
       }
       h1 {
         font-size: 16px;
@@ -183,9 +184,51 @@
       .btn:active {
         transform: translateY(0);
       }
+      .toolbar {
+        position: absolute;
+        top: 8px;
+        right: 10px;
+        display: flex;
+        gap: 6px;
+      }
+      .icon-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+        cursor: pointer;
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+        transition: background 120ms ease, color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+      }
+      .icon-btn:hover {
+        background: #eef4ff;
+        color: var(--primary-dark);
+        transform: translateY(-1px);
+        box-shadow: 0 8px 16px rgba(26, 93, 171, 0.12);
+      }
+      .icon-btn:active {
+        transform: translateY(0);
+      }
+      .icon-svg {
+        width: 16px;
+        height: 16px;
+      }
     </style>
   </head>
   <body>
+    <div class="toolbar">
+      <button id="btnOptions" class="icon-btn" title="扩展设置">
+        <svg class="icon-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M11.03 2.53a1 1 0 0 0-2.06 0l-.21 1.69a5.5 5.5 0 0 0-1.63.94l-1.23-.7a1 1 0 0 0-1.36.37l-.5.86a1 1 0 0 0 .37 1.36l1.23.7c-.05.34-.08.7-.08 1.06 0 .36.03.72.08 1.06l-1.23.7a1 1 0 0 0-.37 1.36l.5.86a1 1 0 0 0 1.36.37l1.23-.7c.46.4 1 .72 1.63.94l.21 1.69a1 1 0 0 0 2.06 0l.21-1.69c.6-.22 1.15-.54 1.63-.94l1.22.7a1 1 0 0 0 1.37-.37l.5-.86a1 1 0 0 0-.37-1.36l-1.23-.7c.05-.34.08-.7.08-1.06 0-.36-.03-.72-.08-1.06l1.23-.7a1 1 0 0 0 .37-1.36l-.5-.86a1 1 0 0 0-1.37-.37l-1.22.7c-.48-.4-1.03-.72-1.63-.94l-.21-1.69Z"/>
+          <circle cx="10" cy="10" r="2.75"/>
+        </svg>
+      </button>
+    </div>
     <h1>未读消息</h1>
     <div id="status">加载中...</div>
     <div id="list" class="list"></div>

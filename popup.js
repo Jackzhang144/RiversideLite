@@ -1,6 +1,7 @@
 const STATUS = document.getElementById("status");
 const LIST = document.getElementById("list");
 const HOME_BTN = document.getElementById("homeBtn");
+const OPTIONS_BTN = document.getElementById("btnOptions");
 
 const THREAD_URL_NEW = (threadId) => `https://bbs.uestc.edu.cn/thread/${threadId}`;
 const THREAD_URL_OLD = (threadId) =>
@@ -14,6 +15,7 @@ const CHAT_URL_OLD_BASE = "https://bbs.uestc.edu.cn/home.php?mod=space&do=pm";
 let currentVersion = "new";
 
 HOME_BTN?.addEventListener("click", openHome);
+OPTIONS_BTN?.addEventListener("click", openOptions);
 init();
 
 function init() {
@@ -218,6 +220,14 @@ async function openItem(item, container) {
   const url = buildNotificationTarget(item, useOld);
   chrome.tabs.create({ url });
   window.close();
+}
+
+async function openOptions() {
+  try {
+    await chrome.runtime.openOptionsPage();
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 function isRateNotification(item) {
