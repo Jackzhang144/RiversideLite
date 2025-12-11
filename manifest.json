@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "清水河畔助手 Lite",
-  "version": "2.0",
-  "description": "清水河畔保活与消息提醒插件",
+  "version": "2.1",
+  "description": "清水河畔插件",
   "icons": {
     "16": "River.png",
     "48": "River.png",

@@ -2,6 +2,8 @@ const STATUS = document.getElementById("status");
 const LIST = document.getElementById("list");
 const HOME_BTN = document.getElementById("homeBtn");
 const OPTIONS_BTN = document.getElementById("btnOptions");
+const ACCOUNT_SELECT = document.getElementById("accountSelect");
+const ACCOUNT_SWITCH_BTN = document.getElementById("accountSwitchBtn");
 
 const THREAD_URL_NEW = (threadId) => `https://bbs.uestc.edu.cn/thread/${threadId}`;
 const THREAD_URL_OLD = (threadId) =>
@@ -16,16 +18,21 @@ let currentVersion = "new";
 
 HOME_BTN?.addEventListener("click", openHome);
 OPTIONS_BTN?.addEventListener("click", openOptions);
+ACCOUNT_SWITCH_BTN?.addEventListener("click", switchAccountFromPopup);
 init();
 
 function init() {
-  chrome.storage.local.get({ version: "new" }, ({ version }) => {
+  chrome.storage.local.get(
+    { version: "new", accounts: [], activeUsername: "" },
+    ({ version, accounts, activeUsername }) => {
     currentVersion = version === "old" ? "old" : "new";
+      populateAccountSelect(accounts || [], activeUsername || "");
     fetchSummary().catch((error) => {
       console.error(error);
       setStatus("加载失败，请检查是否已登录。", true);
     });
-  });
+    }
+  );
 }
 
 async function fetchSummary() {
@@ -229,6 +236,81 @@ async function openOptions() {
   } catch (error) {
     console.error(error);
   }
+}
+
+function populateAccountSelect(accounts, activeUsername = "") {
+  if (!ACCOUNT_SELECT) return;
+  ACCOUNT_SELECT.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "选择账号（可在选项页管理）";
+  ACCOUNT_SELECT.appendChild(placeholder);
+  accounts.forEach((acc) => {
+    const opt = document.createElement("option");
+    opt.value = acc.username;
+    opt.textContent = acc.username + (acc.username === activeUsername ? "（当前）" : "");
+    if (acc.username === activeUsername) opt.selected = true;
+    ACCOUNT_SELECT.appendChild(opt);
+  });
+}
+
+async function switchAccountFromPopup() {
+  if (!ACCOUNT_SELECT) return;
+  const username = ACCOUNT_SELECT.value;
+  if (!username) {
+    setAccountButtonState("请选择账号", "#b20000");
+    return;
+  }
+  ACCOUNT_SWITCH_BTN.disabled = true;
+  ACCOUNT_SWITCH_BTN.textContent = "切换中...";
+  try {
+    const res = await sendMessagePromise({ type: "switchAccount", username });
+    if (!res?.ok) throw new Error(res?.error || "切换失败");
+    setAccountButtonState("切换成功", "#137333", true);
+    setTimeout(() => {
+      resetAccountButton();
+    }, 2000);
+  } catch (err) {
+    setAccountButtonState("切换失败", "#b20000");
+  } finally {
+    if (!ACCOUNT_SWITCH_BTN.classList.contains("success")) {
+      ACCOUNT_SWITCH_BTN.disabled = false;
+      ACCOUNT_SWITCH_BTN.textContent = "切换";
+      ACCOUNT_SWITCH_BTN.style.background = "";
+      ACCOUNT_SWITCH_BTN.style.borderColor = "";
+    }
+  }
+}
+
+function sendMessagePromise(message) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(message, (response) => {
+      const err = chrome.runtime.lastError;
+      if (err) {
+        reject(new Error(err.message || "sendMessage failed"));
+        return;
+      }
+      resolve(response);
+    });
+  });
+}
+
+function setAccountButtonState(text, color, success = false) {
+  ACCOUNT_SWITCH_BTN.textContent = text;
+  ACCOUNT_SWITCH_BTN.style.background = color;
+  ACCOUNT_SWITCH_BTN.style.borderColor = color;
+  ACCOUNT_SWITCH_BTN.style.color = "#fff";
+  ACCOUNT_SWITCH_BTN.disabled = true;
+  ACCOUNT_SWITCH_BTN.classList.toggle("success", success);
+}
+
+function resetAccountButton() {
+  ACCOUNT_SWITCH_BTN.textContent = "切换";
+  ACCOUNT_SWITCH_BTN.style.background = "";
+  ACCOUNT_SWITCH_BTN.style.borderColor = "";
+  ACCOUNT_SWITCH_BTN.style.color = "";
+  ACCOUNT_SWITCH_BTN.disabled = false;
+  ACCOUNT_SWITCH_BTN.classList.remove("success");
 }
 
 function isRateNotification(item) {

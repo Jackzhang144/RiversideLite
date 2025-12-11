@@ -32,6 +32,9 @@ const STATE_DEFAULTS = {
   authorizationHeader: "",
   meowPushEnabled: false,
   meowNickname: "",
+  meowLinkMode: "none",
+  accounts: [],
+  activeUsername: "",
 };
 
 let cachedState = { ...STATE_DEFAULTS };
@@ -58,10 +61,16 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     cachedState.meowNickname = changes.meowNickname.newValue || "";
   }
   if (changes.meowLinkMode && typeof changes.meowLinkMode.newValue !== "undefined") {
-    cachedState.meowLinkMode = changes.meowLinkMode.newValue || "thread";
+    cachedState.meowLinkMode = changes.meowLinkMode.newValue || "none";
   }
   if (changes.lastErrorCode && typeof changes.lastErrorCode.newValue !== "undefined") {
     cachedState.lastErrorCode = changes.lastErrorCode.newValue || "";
+  }
+  if (changes.accounts && Array.isArray(changes.accounts.newValue)) {
+    cachedState.accounts = changes.accounts.newValue;
+  }
+  if (changes.activeUsername && typeof changes.activeUsername.newValue !== "undefined") {
+    cachedState.activeUsername = changes.activeUsername.newValue || "";
   }
 });
 
@@ -70,7 +79,7 @@ chrome.runtime.onStartup.addListener(() => { startup(); });
 
 async function startup() {
   await ensureStateLoaded();
-  await ensureMeowDefaultPersisted();
+  await ensureDefaultsPersisted();
   setActionPopup();
   chrome.alarms.clearAll(() => {
     chrome.alarms.create("mainLoop", { periodInMinutes: CHECK_INTERVAL_MINUTES });
@@ -194,20 +203,33 @@ async function ensureStateLoaded() {
   stateReady = true;
 }
 
-async function ensureMeowDefaultPersisted() {
-  const { meowPushEnabled, meowLinkMode, lastErrorCode } = await chrome.storage.local.get([
-    "meowPushEnabled",
-    "meowLinkMode",
-    "lastErrorCode",
-  ]);
+async function ensureDefaultsPersisted() {
+  const { meowPushEnabled, meowLinkMode, lastErrorCode, accounts, activeUsername } =
+    await chrome.storage.local.get([
+      "meowPushEnabled",
+      "meowLinkMode",
+      "lastErrorCode",
+      "accounts",
+      "activeUsername",
+    ]);
+  const updates = {};
   if (typeof meowPushEnabled === "undefined") {
-    await chrome.storage.local.set({ meowPushEnabled: false });
+    updates.meowPushEnabled = STATE_DEFAULTS.meowPushEnabled;
   }
   if (typeof meowLinkMode === "undefined") {
-    await chrome.storage.local.set({ meowLinkMode: STATE_DEFAULTS.meowLinkMode });
+    updates.meowLinkMode = STATE_DEFAULTS.meowLinkMode;
   }
   if (typeof lastErrorCode === "undefined") {
-    await chrome.storage.local.set({ lastErrorCode: "" });
+    updates.lastErrorCode = STATE_DEFAULTS.lastErrorCode;
+  }
+  if (!Array.isArray(accounts)) {
+    updates.accounts = STATE_DEFAULTS.accounts;
+  }
+  if (typeof activeUsername === "undefined") {
+    updates.activeUsername = STATE_DEFAULTS.activeUsername;
+  }
+  if (Object.keys(updates).length) {
+    await chrome.storage.local.set(updates);
   }
 }
 
@@ -349,6 +371,56 @@ async function ensureBadge() {
     const total = chat + notice;
     updateBadge(total > 0 ? total.toString() : "", total > 0 ? "#00FF00" : "#000000");
   } catch (_) {}
+}
+
+async function switchAccountLegacy(username, password) {
+  await ensureStateLoaded();
+  const targetUser = (username || cachedState.activeUsername || "").trim();
+  let pwd = password || "";
+  if (!pwd && targetUser) {
+    const accounts = await loadAccounts();
+    const found = accounts.find((item) => item.username === targetUser);
+    if (found?.passwordEnc) {
+      try {
+        pwd = await decryptPassword(found.passwordEnc);
+      } catch (error) {
+        console.error("decrypt password failed", error);
+      }
+    } else if (found?.password) {
+      pwd = found.password;
+    }
+  }
+  if (!targetUser || !pwd) {
+    throw new Error("请填写用户名和密码，或先在选项页保存账号。");
+  }
+
+  try {
+    await logoutLegacy().catch((err) => {
+      console.warn("logout skipped or failed", err);
+    });
+    await persistState({ ...cachedState, authorizationHeader: "", lastTotal: 0, activeUsername: targetUser });
+
+    const loginOk = await loginLegacy(targetUser, pwd);
+    if (!loginOk) {
+      throw new Error("登录失败，请检查用户名或密码");
+    }
+    const adopted = await adoptLegacyAuth();
+    if (!adopted) {
+      throw new Error("登录成功但获取凭证失败，请在站点打开页面后重试");
+    }
+    await persistState({
+      ...cachedState,
+      lastTotal: 0,
+      lastErrorCode: "",
+      activeUsername: targetUser,
+    });
+    await reloadBbsTabs();
+    await ensureBadge();
+    return true;
+  } catch (error) {
+    await persistState({ ...cachedState, authorizationHeader: "", lastTotal: 0 });
+    throw error;
+  }
 }
 
 function buildNotifyFallback(promptCount, pmCount) {
@@ -511,6 +583,96 @@ function buildErrorTarget(linkMode, version) {
   return version === "old" ? URLS.old.messages : URLS.new.messages;
 }
 
+async function logoutLegacy() {
+  try {
+    const formhash = await fetchFormhash();
+    if (!formhash) return false;
+    const base = BBS_ROOT.replace(/\/$/, "");
+    const url = `${base}/member.php?mod=logging&action=logout&formhash=${encodeURIComponent(formhash)}&inajax=1`;
+    const res = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+      headers: { Referer: BBS_ROOT },
+    });
+    return res.ok;
+  } catch (error) {
+    console.error("logoutLegacy failed", error);
+    return false;
+  }
+}
+
+async function loginLegacy(username, password) {
+  const base = BBS_ROOT.replace(/\/$/, "");
+  const url = `${base}/member.php?mod=logging&action=login&loginsubmit=yes&inajax=1`;
+  const body = new URLSearchParams();
+  body.set("loginfield", "username");
+  body.set("username", username);
+  body.set("password", password);
+  body.set("questionid", "0");
+  body.set("cookietime", "2592000");
+
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Referer: BBS_ROOT,
+      "X-Requested-With": "XMLHttpRequest",
+    },
+    body: body.toString(),
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    const err = new Error(`登录失败（${res.status}）`);
+    err.status = res.status;
+    throw err;
+  }
+  if (text.includes("欢迎您回来") || text.includes("succeedhandle_login")) {
+    return true;
+  }
+  throw new Error("登录失败，请检查用户名或密码");
+}
+
+async function fetchFormhash() {
+  try {
+    const res = await fetch(BBS_ROOT, { credentials: "include", cache: "no-store" });
+    if (!res.ok) return "";
+    const html = await res.text();
+    const match = html.match(/name=["']formhash["'] value=["']([^"']+)/i);
+    return match ? match[1] : "";
+  } catch (error) {
+    console.error("fetchFormhash failed", error);
+    return "";
+  }
+}
+
+async function loadAccounts() {
+  if (Array.isArray(cachedState.accounts) && cachedState.accounts.length) {
+    return cachedState.accounts;
+  }
+  const stored = await chrome.storage.local.get(["accounts"]);
+  if (Array.isArray(stored.accounts)) {
+    return stored.accounts;
+  }
+  return [];
+}
+
+async function reloadBbsTabs() {
+  try {
+    const tabs = await chrome.tabs.query({ url: ["*://bbs.uestc.edu.cn/*"] });
+    for (const tab of tabs) {
+      if (tab.id) {
+        await chrome.tabs.reload(tab.id, { bypassCache: true });
+      }
+    }
+  } catch (error) {
+    console.error("reloadBbsTabs failed", error);
+  }
+}
+
 function buildThreadUrl(item, useOld) {
   const { threadId, postId, page } = extractThreadLocation(item);
   if (!threadId && !postId) return useOld ? URLS.old.messages : URLS.new.messages;
@@ -660,6 +822,34 @@ function decodeEntities(text) {
   });
 }
 
+async function decryptPassword(payload) {
+  if (!payload?.iv || !payload?.data) throw new Error("密码无效");
+  const key = await getCryptoKey();
+  const iv = base64ToUint8(payload.iv);
+  const cipher = base64ToUint8(payload.data);
+  const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
+  return new TextDecoder().decode(plainBuf);
+}
+
+function base64ToUint8(str) {
+  const binary = atob(str);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+let cachedCryptoKey = null;
+const KEY_BASE64 = "bW9jLXNpbXBsZS1rZXktMTIzNDU2Nzg="; // aes-128 key
+async function getCryptoKey() {
+  if (cachedCryptoKey) return cachedCryptoKey;
+  const raw = base64ToUint8(KEY_BASE64);
+  cachedCryptoKey = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["decrypt"]);
+  return cachedCryptoKey;
+}
+
 function isRateNotification(item) {
   if (item?.kind === "rate") return true;
   const text = stripHtml([item?.summary, item?.html_message, item?.subject].filter(Boolean).join(" "));
@@ -762,6 +952,18 @@ chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
         sendResponse({ ok: false, error: error?.message || "unknown" });
       });
     return true;
+  }
+  if (message?.type === "switchAccount") {
+    (async () => {
+      try {
+        await switchAccountLegacy(message.username, message.password);
+        sendResponse({ ok: true });
+      } catch (error) {
+        console.error(error);
+        sendResponse({ ok: false, error: error?.message || "unknown" });
+      }
+    })();
+    return true; // keep port open for async response
   }
   return false;
 });

@@ -184,10 +184,39 @@
       .btn:active {
         transform: translateY(0);
       }
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .account-compact {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .select {
+        min-width: 120px;
+        max-width: 140px;
+        padding: 4px 6px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #fff;
+        font-size: 12px;
+        color: var(--text);
+      }
+      .status-inline {
+        font-size: 12px;
+        color: var(--muted);
+        min-height: 16px;
+        margin: 0 0 4px;
+      }
+      .top-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
       .toolbar {
-        position: absolute;
-        top: 8px;
-        right: 10px;
         display: flex;
         gap: 6px;
       }
@@ -221,15 +250,23 @@
     </style>
   </head>
   <body>
-    <div class="toolbar">
-      <button id="btnOptions" class="icon-btn" title="扩展设置">
-        <svg class="icon-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <path d="M11.03 2.53a1 1 0 0 0-2.06 0l-.21 1.69a5.5 5.5 0 0 0-1.63.94l-1.23-.7a1 1 0 0 0-1.36.37l-.5.86a1 1 0 0 0 .37 1.36l1.23.7c-.05.34-.08.7-.08 1.06 0 .36.03.72.08 1.06l-1.23.7a1 1 0 0 0-.37 1.36l.5.86a1 1 0 0 0 1.36.37l1.23-.7c.46.4 1 .72 1.63.94l.21 1.69a1 1 0 0 0 2.06 0l.21-1.69c.6-.22 1.15-.54 1.63-.94l1.22.7a1 1 0 0 0 1.37-.37l.5-.86a1 1 0 0 0-.37-1.36l-1.23-.7c.05-.34.08-.7.08-1.06 0-.36-.03-.72-.08-1.06l1.23-.7a1 1 0 0 0 .37-1.36l-.5-.86a1 1 0 0 0-1.37-.37l-1.22.7c-.48-.4-1.03-.72-1.63-.94l-.21-1.69Z"/>
-          <circle cx="10" cy="10" r="2.75"/>
-        </svg>
-      </button>
+    <div class="top-row">
+      <div class="header">
+        <h1 style="margin: 0;">未读消息</h1>
+        <div class="account-compact">
+          <select id="accountSelect" class="select"></select>
+          <button id="accountSwitchBtn" class="btn" style="padding:4px 8px;font-size:12px;">切换</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button id="btnOptions" class="icon-btn" title="扩展设置">
+          <svg class="icon-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M11.03 2.53a1 1 0 0 0-2.06 0l-.21 1.69a5.5 5.5 0 0 0-1.63.94l-1.23-.7a1 1 0 0 0-1.36.37l-.5.86a1 1 0 0 0 .37 1.36l1.23.7c-.05.34-.08.7-.08 1.06 0 .36.03.72.08 1.06l-1.23.7a1 1 0 0 0-.37 1.36l.5.86a1 1 0 0 0 1.36.37l1.23-.7c.46.4 1 .72 1.63.94l.21 1.69a1 1 0 0 0 2.06 0l.21-1.69c.6-.22 1.15-.54 1.63-.94l1.22.7a1 1 0 0 0 1.37-.37l.5-.86a1 1 0 0 0-.37-1.36l-1.23-.7c.05-.34.08-.7.08-1.06 0-.36-.03-.72-.08-1.06l1.23-.7a1 1 0 0 0 .37-1.36l-.5-.86a1 1 0 0 0-1.37-.37l-1.22.7c-.48-.4-1.03-.72-1.63-.94l-.21-1.69Z"/>
+            <circle cx="10" cy="10" r="2.75"/>
+          </svg>
+        </button>
+      </div>
     </div>
-    <h1>未读消息</h1>
     <div id="status">加载中...</div>
     <div id="list" class="list"></div>
     <div class="footer">

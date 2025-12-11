@@ -193,6 +193,31 @@
       color: var(--muted);
       white-space: nowrap;
     }
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .input-row span {
+      min-width: 90px;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .input-row input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      background: #fdfefe;
+      transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+    .input-row input:focus {
+      border-color: #aac4ec;
+      box-shadow: 0 0 0 2px rgba(31, 76, 143, 0.12);
+      outline: none;
+    }
     .pill {
       position: relative;
       display: inline-flex;
@@ -252,12 +277,65 @@
       position: relative;
       z-index: 1;
     }
+    .account-list {
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #f9fafc;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .account-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .account-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .account-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .account-name {
+      font-weight: 600;
+      color: var(--text);
+    }
+    .account-badge {
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #e8f0ff;
+      color: var(--primary-dark);
+      font-size: 12px;
+    }
+    .account-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .account-actions .ghost {
+      background: #f6f7fb;
+      color: var(--muted);
+      border-color: var(--border);
+    }
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: normal;
+    }
   </style>
 </head>
 <body>
   <div class="page">
     <div class="setting-group">
-      <h1>通知设置</h1>
+      <h1>通知设置 <span class="hint">关闭后徽标仍更新</span></h1>
       <div class="toggle-row">
         <label for="notificationsToggle" class="toggle-wrapper">
           <input type="checkbox" id="notificationsToggle" class="toggle-input">
@@ -265,11 +343,10 @@
         </label>
         <label for="notificationsToggle" class="toggle-text">启用系统通知</label>
       </div>
-      <p>关闭后仍会更新徽标，但不会弹出桌面通知。</p>
     </div>
 
     <div class="setting-group">
-      <h1>版本设置</h1>
+      <h1>版本设置 <span class="hint">影响跳转链接</span></h1>
       <div class="radio-group">
         <label class="pill">
           <input type="radio" name="version" value="new" id="versionNew">
@@ -284,11 +361,33 @@
           <span class="pill-border"></span>
         </label>
       </div>
-      <p>选择新版或旧版 BBS 界面，将影响点击图标和通知后的跳转链接。</p>
     </div>
 
     <div class="setting-group">
-      <h1>MeoW 推送</h1>
+      <h1>账号切换 <span class="hint">本地存储，多账号快速切换</span></h1>
+      <p>退出当前账号并使用新账号登录，采用旧版登录方式（无验证码）。密码仅用于本地加密存储与切换，不会上传。</p>
+      <div class="input-row">
+        <span>用户名</span>
+        <input type="text" id="switchUsername" placeholder="输入用户名">
+      </div>
+      <div class="input-row">
+        <span>密码</span>
+        <input type="password" id="switchPassword" placeholder="输入密码">
+      </div>
+      <div class="text-row" style="flex-wrap: wrap; row-gap: 6px;">
+        <span>账号操作</span>
+        <div class="inline-actions" style="flex-wrap: wrap; row-gap: 6px;">
+          <button id="switchBtn" type="button">切换账号</button>
+          <button id="accountSaveBtn" type="button">保存/更新账号</button>
+          <span id="switchStatus" class="status-text"></span>
+          <span id="accountStatus" class="status-text"></span>
+        </div>
+      </div>
+      <div id="accountList" class="account-list"></div>
+    </div>
+
+    <div class="setting-group">
+      <h1>MeoW 推送 <span class="hint">可选附带跳转链接</span></h1>
       <p>MeoW 是专为鸿蒙 5.0 及以上打造的消息提醒应用，使用系统级推送，无需后台常驻。</p>
       <div class="toggle-row">
         <label for="meowToggle" class="toggle-wrapper">

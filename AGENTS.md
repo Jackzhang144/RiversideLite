@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Root contains the Chrome extension assets: `manifest.json` defines permissions and entrypoints; `background.js` is the service worker for alarms, fetching summaries, badge/notification updates, and MeoW 推送；`popup.html`/`popup.js` render the message list UI；`options.html`/`options.js` manage settings（版本切换、系统通知、MeoW 推送链接模式、昵称配置与测试）；`River.png` is the shared icon.
+- Root contains the Chrome extension assets: `manifest.json` defines permissions and entrypoints; `background.js` is the service worker for alarms, fetching summaries, badge/notification updates, MeoW 推送、账号切换；`popup.html`/`popup.js` render the message list UI、快捷账号切换；`options.html`/`options.js` manage settings（版本切换、系统通知、MeoW 推送链接模式与测试、本地加密账号管理）；`River.png` is the shared icon.
 - No bundler or dependencies are present—HTML, JS, and CSS live together for each surface. Keep shared constants in `background.js`; reuse helper functions instead of duplicating logic in popup/options. Persist new settings alongside `STATE_DEFAULTS` and wire them through `chrome.storage`.
 
 ## Build, Test, and Development Commands
@@ -17,6 +17,7 @@
 ## Testing Guidelines
 - Manual verification: ensure login state is detected, badge updates, and notifications open the correct URL targets. Test both “new” and “old” BBS versions via the options page toggle.
 - When changing popup rendering, verify empty state, error state, and “mark as read” actions. Check notification click handlers still focus or open tabs as expected.
+- For account switching, ensure stored credentials are encrypted locally, switching refreshes opened tabs, and popup quick-switch works with saved accounts.
 - There is no automated test suite; keep changes minimal and isolate UI/logic to simplify manual checks.
 
 ## Commit & Pull Request Guidelines
@@ -25,4 +26,4 @@
 
 ## Permissions & Configuration Notes
 - Host permissions target `bbs.uestc.edu.cn` (session via cookies) and `api.chuckfang.com` for MeoW 推送; avoid broadening scopes without strong justification.
-- Keep alarms lightweight (current 1-minute interval) and avoid blocking the service worker. For new settings, surface toggles in `options.html` and persist via `chrome.storage`. MeoW push uses `api.chuckfang.com`; keep host permissions limited to the existing domains.
+- Keep alarms lightweight (current 1-minute interval) and avoid blocking the service worker. For new settings, surface toggles in `options.html` and persist via `chrome.storage`. MeoW push uses `api.chuckfang.com`; keep host permissions limited to the existing domains. Account passwords are encrypted locally (AES) before storing; never log or transmit them elsewhere.
