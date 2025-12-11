@@ -5,6 +5,7 @@ const OPTIONS_BTN = document.getElementById("btnOptions");
 const ACCOUNT_SELECT = document.getElementById("accountSelect");
 const ACCOUNT_SWITCH_BTN = document.getElementById("accountSwitchBtn");
 let activeAccountUsername = "";
+let cachedAccounts = [];
 let currentVersion = "new";
 
 const THREAD_URL_NEW = (threadId) => `https://bbs.uestc.edu.cn/thread/${threadId}`;
@@ -241,6 +242,7 @@ async function openOptions() {
 }
 
 function populateAccountSelect(accounts, activeUsername = "") {
+  cachedAccounts = Array.isArray(accounts) ? accounts : [];
   if (activeUsername) {
     activeAccountUsername = activeUsername;
   }
@@ -252,14 +254,25 @@ function populateAccountSelect(accounts, activeUsername = "") {
   placeholder.disabled = Boolean(accounts.length);
   placeholder.selected = true;
   ACCOUNT_SELECT.appendChild(placeholder);
-  accounts.forEach((acc) => {
+  cachedAccounts.forEach((acc) => {
     const opt = document.createElement("option");
+    const isActive = acc.username === activeAccountUsername;
     opt.value = acc.username;
-    opt.textContent = acc.username + (acc.username === activeUsername ? "（当前）" : "");
-    if (acc.username === activeUsername) opt.selected = true;
+    opt.textContent = acc.username + (isActive ? "(on)" : "");
+    if (isActive) opt.selected = true;
     ACCOUNT_SELECT.appendChild(opt);
   });
   updateSwitchButtonState();
+}
+
+function refreshAccountSelect(activeUsername = activeAccountUsername) {
+  if (cachedAccounts.length) {
+    populateAccountSelect(cachedAccounts, activeUsername);
+    return;
+  }
+  chrome.storage.local.get({ accounts: [] }, ({ accounts }) => {
+    populateAccountSelect(accounts || [], activeUsername);
+  });
 }
 
 async function switchAccountFromPopup() {
@@ -276,6 +289,7 @@ async function switchAccountFromPopup() {
     if (!res?.ok) throw new Error(res?.error || "切换失败");
     setAccountButtonState("切换成功", "#137333", true);
     activeAccountUsername = username;
+    refreshAccountSelect(username);
     try {
       await fetchSummary();
     } catch (error) {
@@ -332,7 +346,7 @@ function updateSwitchButtonState(activeUsername = activeAccountUsername) {
   const selected = ACCOUNT_SELECT?.value || "";
   if (selected && selected === activeUsername) {
     ACCOUNT_SWITCH_BTN.disabled = true;
-    ACCOUNT_SWITCH_BTN.textContent = "已是当前";
+    ACCOUNT_SWITCH_BTN.textContent = "当前登录";
     ACCOUNT_SWITCH_BTN.style.background = "#e5e7eb";
     ACCOUNT_SWITCH_BTN.style.borderColor = "#d0d3d8";
     ACCOUNT_SWITCH_BTN.style.color = "#666";
