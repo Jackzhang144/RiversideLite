@@ -318,15 +318,29 @@ function buildNotificationTarget(item, useOld) {
 
 function buildThreadUrl(item, useOld) {
   const { threadId, postId, page } = extractThreadLocation(item);
-  if (!threadId) return useOld ? FALLBACK_URL_OLD : FALLBACK_URL_NEW;
+  if (!threadId && !postId) return useOld ? FALLBACK_URL_OLD : FALLBACK_URL_NEW;
+  if (!threadId && postId && !useOld) {
+    return buildGotoUrl(null, postId);
+  }
   if (useOld) {
     if (postId) return THREAD_REDIRECT_OLD(threadId, postId);
     return THREAD_URL_OLD(threadId);
+  }
+  if (postId && !page) {
+    // 当缺少页码时使用 /goto 路由以定位到具体楼层
+    return buildGotoUrl(threadId, postId);
   }
   const url = new URL(THREAD_URL_NEW(threadId));
   if (page) url.searchParams.set("page", page);
   if (postId) url.hash = `post-${postId}`;
   return url.toString();
+}
+
+function buildGotoUrl(threadId, postId) {
+  const base = "https://bbs.uestc.edu.cn";
+  if (!postId) return threadId ? `${base}/thread/${threadId}` : base;
+  if (threadId) return `${base}/goto/${threadId}/${postId}`;
+  return `${base}/goto/${postId}`;
 }
 
 function extractThreadLocation(item) {

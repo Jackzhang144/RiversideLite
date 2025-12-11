@@ -26,6 +26,7 @@ const URLS = {
 
 const STATE_DEFAULTS = {
   lastTotal: 0,
+  lastErrorCode: "",
   notificationsEnabled: true,
   version: "new",
   authorizationHeader: "",
@@ -55,6 +56,12 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
   if (changes.meowNickname && typeof changes.meowNickname.newValue !== "undefined") {
     cachedState.meowNickname = changes.meowNickname.newValue || "";
+  }
+  if (changes.meowLinkMode && typeof changes.meowLinkMode.newValue !== "undefined") {
+    cachedState.meowLinkMode = changes.meowLinkMode.newValue || "thread";
+  }
+  if (changes.lastErrorCode && typeof changes.lastErrorCode.newValue !== "undefined") {
+    cachedState.lastErrorCode = changes.lastErrorCode.newValue || "";
   }
 });
 
@@ -111,20 +118,19 @@ async function checkStatus() {
 
     setActionPopup();
     await maybeNotify(total, notice, chat, previousTotal, payload);
-    await persistState({ ...cachedState, lastTotal: total });
+    await persistState({ ...cachedState, lastTotal: total, lastErrorCode: "" });
 
   } catch (error) {
     console.error(error);
     const statusCode = getErrorStatusCode(error);
     if (statusCode === 401) {
       updateBadge("未登录", "#999999");
-      return;
-    }
-    if (statusCode) {
+    } else if (statusCode) {
       updateBadge(String(statusCode), "#FF0000");
     } else {
       updateBadge("ERR", "#FF0000");
     }
+    await maybeNotifyError(statusCode, error);
   }
 }
 
@@ -145,7 +151,7 @@ async function refreshAndShow() {
       0
     );
     const total = chat + notice;
-    await persistState({ ...cachedState, lastTotal: total });
+    await persistState({ ...cachedState, lastTotal: total, lastErrorCode: "" });
     updateBadge(total > 0 ? total.toString() : "", total > 0 ? "#00FF00" : "#000000");
   } catch (error) {
     console.error("refreshAndShow failed", error);
@@ -189,9 +195,19 @@ async function ensureStateLoaded() {
 }
 
 async function ensureMeowDefaultPersisted() {
-  const { meowPushEnabled } = await chrome.storage.local.get(["meowPushEnabled"]);
+  const { meowPushEnabled, meowLinkMode, lastErrorCode } = await chrome.storage.local.get([
+    "meowPushEnabled",
+    "meowLinkMode",
+    "lastErrorCode",
+  ]);
   if (typeof meowPushEnabled === "undefined") {
     await chrome.storage.local.set({ meowPushEnabled: false });
+  }
+  if (typeof meowLinkMode === "undefined") {
+    await chrome.storage.local.set({ meowLinkMode: STATE_DEFAULTS.meowLinkMode });
+  }
+  if (typeof lastErrorCode === "undefined") {
+    await chrome.storage.local.set({ lastErrorCode: "" });
   }
 }
 
@@ -222,6 +238,7 @@ async function maybeNotify(total, promptCount, pmCount, previousTotal, payload) 
 
   let message = buildNotifyFallback(promptCount, pmCount);
   const version = cachedState.version === "old" ? "old" : "new";
+  const linkMode = cachedState.meowLinkMode || "thread";
   let effectivePayload = payload;
 
   try {
@@ -258,12 +275,15 @@ async function maybeNotify(total, promptCount, pmCount, previousTotal, payload) 
     console.error("notify summary failed", error);
   }
 
-  const meowTarget = buildMeowTarget(effectivePayload, version);
-  const meowPayloads = buildMeowPayloads(effectivePayload, version, message, meowTarget);
+  const meowTarget = buildMeowTarget(effectivePayload, version, linkMode);
+  const meowPayloads = buildMeowPayloads(effectivePayload, version, message, meowTarget, linkMode);
 
   if (shouldPushMeow) {
     for (const entry of meowPayloads) {
-      await maybeSendMeowPush(entry.text, total, { targetUrl: entry.target });
+      await maybeSendMeowPush(entry.text, total, {
+        targetUrl: entry.target,
+        includeUrl: linkMode !== "none",
+      });
     }
   }
 
@@ -279,6 +299,41 @@ async function maybeNotify(total, promptCount, pmCount, previousTotal, payload) 
     priority: 2,
     eventTime: Date.now()
   });
+}
+
+async function maybeNotifyError(statusCode, error) {
+  await ensureStateLoaded();
+  const codeKey = statusCode ? String(statusCode) : "ERR";
+  if (cachedState.lastErrorCode === codeKey) return;
+
+  const shouldPushMeow = cachedState.meowPushEnabled && Boolean((cachedState.meowNickname || "").trim());
+  const shouldShowNotification = cachedState.notificationsEnabled;
+  const version = cachedState.version === "old" ? "old" : "new";
+  const linkMode = cachedState.meowLinkMode || "thread";
+  const target = buildErrorTarget(linkMode, version);
+
+  const baseText = statusCode ? `请求失败（${statusCode}）` : "请求失败";
+  const detail = error?.message ? `原因：${error.message}` : "请检查登录状态或网络。";
+  const message = `${baseText}，${detail}`;
+
+  await persistState({ ...cachedState, lastErrorCode: codeKey });
+
+  if (shouldShowNotification) {
+    chrome.notifications.create(`riverside-err-${Date.now()}`, {
+      type: "basic",
+      iconUrl: "River.png",
+      title: "清水河畔助手异常",
+      message,
+      priority: 2,
+    });
+  }
+
+  if (shouldPushMeow) {
+    await maybeSendMeowPush(message, 0, {
+      targetUrl: target,
+      includeUrl: linkMode !== "none",
+    });
+  }
 }
 
 async function ensureBadge() {
@@ -304,7 +359,7 @@ function buildNotifyFallback(promptCount, pmCount) {
 }
 
 async function maybeSendMeowPush(message, total, options = {}) {
-  const { force = false, targetUrl } = options;
+  const { force = false, targetUrl, includeUrl = true } = options;
   if (!force && !cachedState.meowPushEnabled) {
     log("MeoW push skipped: disabled");
     return;
@@ -318,13 +373,15 @@ async function maybeSendMeowPush(message, total, options = {}) {
   const content = message || "收到新的站内消息";
   const title = total > 0 ? `清水河畔 ${total} 条新提醒` : "清水河畔助手提醒";
   const version = cachedState.version === "old" ? "old" : "new";
-  const finalTarget = targetUrl || URLS[version].messages;
+  const finalTarget = includeUrl ? targetUrl || URLS[version].messages : targetUrl || "";
   const endpoint = new URL(`${MEO_W_BASE}/${encodeURIComponent(nickname)}/${encodeURIComponent(title)}`);
   endpoint.searchParams.set("msgType", "text");
   const body = new URLSearchParams();
   body.set("title", title);
   body.set("msg", content);
-  body.set("url", finalTarget);
+  if (includeUrl && finalTarget) {
+    body.set("url", finalTarget);
+  }
 
   try {
     log("MeoW push request", {
@@ -366,8 +423,13 @@ function buildNotificationText(item) {
   return (body || title).slice(0, 140) || "收到新的提醒";
 }
 
-function buildMeowTarget(payload, version) {
-  const fallback = version === "old" ? URLS.old.messages : URLS.new.messages;
+function buildMeowTarget(payload, version, linkMode = "thread") {
+  if (linkMode === "none") return "";
+  const fallback = linkMode === "list"
+    ? version === "old" ? URLS.old.messages : URLS.new.messages
+    : version === "old"
+    ? URLS.old.messages
+    : URLS.new.messages;
   if (!payload) return fallback;
   const items = Array.isArray(payload?.new_notifications) ? payload.new_notifications : [];
   const chats = Array.isArray(payload?.new_chats) ? payload.new_chats : [];
@@ -376,23 +438,25 @@ function buildMeowTarget(payload, version) {
     (item) => !isRateNotification(item) && !isTaskCompletionNotification(item)
   );
   if (firstNotification) {
-    const url = buildNotificationTarget(firstNotification, version, fallback);
+    const url = buildNotificationTarget(firstNotification, version, fallback, linkMode);
     if (url) return url;
   }
 
   if (chats.length) {
-    return buildLegacyChatUrl(chats[0]);
+    return linkMode === "list" ? fallback : buildLegacyChatUrl(chats[0]);
   }
 
   if (payload?.new_messages?.chat) {
-    return buildLegacyChatUrl();
+    return linkMode === "list" ? fallback : buildLegacyChatUrl();
   }
 
   return fallback;
 }
 
-function buildNotificationTarget(item, version, fallback) {
+function buildNotificationTarget(item, version, fallback, linkMode = "thread") {
   if (!item) return fallback;
+  if (linkMode === "none") return "";
+  if (linkMode === "list") return fallback;
   if (isRateNotification(item) || isTaskCompletionNotification(item)) return "";
   const summaryText = stripHtml([item?.summary, item?.html_message, item?.subject].filter(Boolean).join(" "));
   if (item.kind === "report" || /有新的举报等待处理/.test(summaryText)) {
@@ -402,7 +466,7 @@ function buildNotificationTarget(item, version, fallback) {
   return url || fallback;
 }
 
-function buildMeowPayloads(payload, version, fallbackText, fallbackTarget) {
+function buildMeowPayloads(payload, version, fallbackText, fallbackTarget, linkMode = "thread") {
   const fallback = fallbackTarget || (version === "old" ? URLS.old.messages : URLS.new.messages);
   const results = [];
   if (payload) {
@@ -410,14 +474,19 @@ function buildMeowPayloads(payload, version, fallbackText, fallbackTarget) {
     const chats = Array.isArray(payload?.new_chats) ? payload.new_chats : [];
 
     items.forEach((item) => {
-      const target = buildNotificationTarget(item, version, fallback);
-      if (!target) return;
+      const target = linkMode === "none" ? "" : buildNotificationTarget(item, version, fallback, linkMode);
+      if (!target && linkMode !== "none") return;
       const text = buildNotificationText(item);
       results.push({ text, target });
     });
 
     chats.forEach((chat) => {
-      const target = buildLegacyChatUrl(chat);
+      const target =
+        linkMode === "thread"
+          ? buildLegacyChatUrl(chat)
+          : linkMode === "list"
+          ? fallback
+          : "";
       const title = normalizeText(chat.subject || chat.to_username || chat.last_author || "站内信");
       const body = stripHtml(chat.last_summary || "");
       const text = [title, body].filter(Boolean).join(" - ").slice(0, 140) || "收到新的站内信";
@@ -426,23 +495,46 @@ function buildMeowPayloads(payload, version, fallbackText, fallbackTarget) {
   }
 
   if (!results.length) {
-    results.push({ text: fallbackText || "收到新的站内消息", target: fallback });
+    const target = linkMode === "none" ? "" : fallback;
+    results.push({ text: fallbackText || "收到新的站内消息", target });
   }
 
   return results;
 }
 
+function buildErrorTarget(linkMode, version) {
+  if (linkMode === "none") return "";
+  if (linkMode === "list") {
+    return version === "old" ? URLS.old.messages : URLS.new.messages;
+  }
+  return version === "old" ? URLS.old.messages : URLS.new.messages;
+}
+
 function buildThreadUrl(item, useOld) {
   const { threadId, postId, page } = extractThreadLocation(item);
-  if (!threadId) return useOld ? URLS.old.messages : URLS.new.messages;
+  if (!threadId && !postId) return useOld ? URLS.old.messages : URLS.new.messages;
+  if (!threadId && postId && !useOld) {
+    return buildGotoUrl(null, postId);
+  }
   if (useOld) {
     if (postId) return THREAD_REDIRECT_OLD(threadId, postId);
     return THREAD_URL_OLD(threadId);
+  }
+  if (postId && !page) {
+    // 当缺少页码时使用 /goto 路由以定位具体楼层
+    return buildGotoUrl(threadId, postId);
   }
   const url = new URL(THREAD_URL_NEW(threadId));
   if (page) url.searchParams.set("page", page);
   if (postId) url.hash = `post-${postId}`;
   return url.toString();
+}
+
+function buildGotoUrl(threadId, postId) {
+  const base = BBS_ROOT.replace(/\/$/, "");
+  if (!postId) return threadId ? `${base}/thread/${threadId}` : base;
+  if (threadId) return `${base}/goto/${threadId}/${postId}`;
+  return `${base}/goto/${postId}`;
 }
 
 function extractThreadLocation(item) {
@@ -572,7 +664,19 @@ async function sendMeowTest() {
   }
   log("MeoW test push start");
   const content = "这是一条 MeoW 测试推送，来自清水河畔助手。";
-  await maybeSendMeowPush(content, 1, { force: true });
+  const version = cachedState.version === "old" ? "old" : "new";
+  const linkMode = cachedState.meowLinkMode || "thread";
+  const target =
+    linkMode === "none"
+      ? ""
+      : linkMode === "list"
+      ? URLS[version].messages
+      : URLS[version].messages;
+  await maybeSendMeowPush(content, 1, {
+    force: true,
+    targetUrl: target,
+    includeUrl: linkMode !== "none",
+  });
   return true;
 }
 
