@@ -1,0 +1,71 @@
+name: Edge Add-on Upload
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    env:
+      EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+      EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+      EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pack extension
+        run: |
+          mkdir -p dist
+          zip -r dist/edge-package.zip \
+            manifest.json background.js popup.js popup.html options.js options.html River.png README.md
+
+      - name: Submit package
+        id: submit
+        run: |
+          RESPONSE=$(
+            curl -sS -f \
+              -H "Authorization: ApiKey $EDGE_API_KEY" \
+              -H "X-ClientID: $EDGE_CLIENT_ID" \
+              -F "file=@dist/edge-package.zip;type=application/zip" \
+              "https://api.addons.microsoftedge.microsoft.com/v1/products/$EDGE_PRODUCT_ID/submissions"
+          )
+          echo "$RESPONSE"
+          SUBMISSION_ID=$(echo "$RESPONSE" | jq -r '.id // .submissionId')
+          [ -n "$SUBMISSION_ID" ] || { echo "No submission id"; exit 1; }
+          echo "submission_id=$SUBMISSION_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Poll submission status
+        env:
+          SUBMISSION_ID: ${{ steps.submit.outputs.submission_id }}
+        run: |
+          for i in {1..20}; do
+            STATUS=$(
+              curl -sS -f \
+                -H "Authorization: ApiKey $EDGE_API_KEY" \
+                -H "X-ClientID: $EDGE_CLIENT_ID" \
+                "https://api.addons.microsoftedge.microsoft.com/v1/products/$EDGE_PRODUCT_ID/submissions/$SUBMISSION_ID" \
+              | jq -r '.status'
+            )
+            echo "Status: $STATUS"
+            case "$STATUS" in
+              Complete) exit 0 ;;
+              Failed) echo "Submission failed"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "Timed out"; exit 1
+
+      # 如果需要立即发布，取消下一步注释；部分帐号可能审核通过后需单独 publish
+      # - name: Publish
+      #   env:
+      #     EDGE_API_KEY: ${{ env.EDGE_API_KEY }}
+      #     EDGE_CLIENT_ID: ${{ env.EDGE_CLIENT_ID }}
+      #   run: |
+      #     curl -sS -f -X POST \
+      #       -H "Authorization: ApiKey $EDGE_API_KEY" \
+      #       -H "X-ClientID: $EDGE_CLIENT_ID" \
+      #       "https://api.addons.microsoftedge.microsoft.com/v1/products/$EDGE_PRODUCT_ID/publish"
