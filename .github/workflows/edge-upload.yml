@@ -50,7 +50,11 @@ jobs:
           fi
           SUBMISSION_ID=$(jq -r '.id // .submissionId // .value // .SubmissionId // empty' "$BODY_FILE")
           if [ -z "$SUBMISSION_ID" ]; then
-            SUBMISSION_ID=$(grep -i "^Location:" "$HEADER_FILE" | sed -n 's/.*submissions[/]\([A-Za-z0-9-]\+\).*/\1/p' | tail -n1)
+            LOC=$(grep -i "^Location:" "$HEADER_FILE" | awk '{print $2}' | tr -d '\r')
+            # 如果 Location 形如 .../submissions/<id>，截取最后一段；否则直接用 Location 作为 id
+            if [ -n "$LOC" ]; then
+              SUBMISSION_ID=$(echo "$LOC" | awk -F'/' '{print $NF}')
+            fi
           fi
           if [ -z "$SUBMISSION_ID" ]; then
             echo "No submission id in response"
