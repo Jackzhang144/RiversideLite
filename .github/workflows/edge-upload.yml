@@ -51,8 +51,8 @@ jobs:
           SUBMISSION_ID=$(jq -r '.id // .submissionId // .value // .SubmissionId // empty' "$BODY_FILE")
           if [ -z "$SUBMISSION_ID" ]; then
             LOC=$(grep -i "^Location:" "$HEADER_FILE" | awk '{print $2}' | tr -d '\r')
-            # 如果 Location 形如 .../submissions/<id>，截取最后一段；否则直接用 Location 作为 id
             if [ -n "$LOC" ]; then
+              SUBMISSION_URL="$LOC"
               SUBMISSION_ID=$(echo "$LOC" | awk -F'/' '{print $NF}')
             fi
           fi
@@ -61,10 +61,16 @@ jobs:
             exit 1
           fi
           echo "submission_id=$SUBMISSION_ID" >> "$GITHUB_OUTPUT"
+          if [ -n "$SUBMISSION_URL" ]; then
+            echo "submission_url=$SUBMISSION_URL" >> "$GITHUB_OUTPUT"
+          else
+            echo "submission_url=https://api.addons.microsoftedge.microsoft.com/v1/products/$EDGE_PRODUCT_ID/submissions/$SUBMISSION_ID" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Poll submission status
         env:
           SUBMISSION_ID: ${{ steps.submit.outputs.submission_id }}
+          SUBMISSION_URL: ${{ steps.submit.outputs.submission_url }}
         run: |
           for i in {1..20}; do
             STATUS_BODY=$(mktemp)
@@ -73,7 +79,7 @@ jobs:
                 -H "Authorization: ApiKey $EDGE_API_KEY" \
                 -H "X-ClientID: $EDGE_CLIENT_ID" \
                 -o "$STATUS_BODY" \
-                "https://api.addons.microsoftedge.microsoft.com/v1/products/$EDGE_PRODUCT_ID/submissions/$SUBMISSION_ID"
+                "${SUBMISSION_URL:-https://api.addons.microsoftedge.microsoft.com/v1/products/$EDGE_PRODUCT_ID/submissions/$SUBMISSION_ID}"
             )
             echo "Poll attempt $i, HTTP $STATUS_CODE"
             cat "$STATUS_BODY"
