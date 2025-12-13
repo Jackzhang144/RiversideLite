@@ -67,14 +67,23 @@ jobs:
           SUBMISSION_ID: ${{ steps.submit.outputs.submission_id }}
         run: |
           for i in {1..20}; do
-            STATUS=$(
-              curl -sS -f \
+            STATUS_BODY=$(mktemp)
+            STATUS_CODE=$(
+              curl -sS -w "%{http_code}" \
                 -H "Authorization: ApiKey $EDGE_API_KEY" \
                 -H "X-ClientID: $EDGE_CLIENT_ID" \
-                "https://api.addons.microsoftedge.microsoft.com/v1/products/$EDGE_PRODUCT_ID/submissions/$SUBMISSION_ID" \
-              | jq -r '.status'
+                -o "$STATUS_BODY" \
+                "https://api.addons.microsoftedge.microsoft.com/v1/products/$EDGE_PRODUCT_ID/submissions/$SUBMISSION_ID"
             )
-            echo "Status: $STATUS"
+            echo "Poll attempt $i, HTTP $STATUS_CODE"
+            cat "$STATUS_BODY"
+            echo
+            if [ "$STATUS_CODE" -eq 404 ]; then
+              echo "Submission not found (404), stopping."
+              exit 1
+            fi
+            STATUS=$(jq -r '.status // empty' "$STATUS_BODY")
+            echo "Status: ${STATUS:-unknown}"
             case "$STATUS" in
               Complete) exit 0 ;;
               Failed) echo "Submission failed"; exit 1 ;;
