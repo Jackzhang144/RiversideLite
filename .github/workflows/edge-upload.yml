@@ -26,16 +26,28 @@ jobs:
       - name: Submit package
         id: submit
         run: |
-          RESPONSE=$(
-            curl -sS -f \
+          BODY_FILE=$(mktemp)
+          HTTP_STATUS=$(
+            curl -sS -w "%{http_code}" \
               -H "Authorization: ApiKey $EDGE_API_KEY" \
               -H "X-ClientID: $EDGE_CLIENT_ID" \
               -F "file=@dist/edge-package.zip;type=application/zip" \
+              -o "$BODY_FILE" \
               "https://api.addons.microsoftedge.microsoft.com/v1/products/$EDGE_PRODUCT_ID/submissions"
           )
-          echo "$RESPONSE"
-          SUBMISSION_ID=$(echo "$RESPONSE" | jq -r '.id // .submissionId')
-          [ -n "$SUBMISSION_ID" ] || { echo "No submission id"; exit 1; }
+          echo "Upload HTTP status: $HTTP_STATUS"
+          echo "Upload response body:"
+          cat "$BODY_FILE"
+          echo
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Upload failed with status $HTTP_STATUS"
+            exit 1
+          fi
+          SUBMISSION_ID=$(jq -r '.id // .submissionId // .value // .SubmissionId // empty' "$BODY_FILE")
+          if [ -z "$SUBMISSION_ID" ]; then
+            echo "No submission id in response"
+            exit 1
+          fi
           echo "submission_id=$SUBMISSION_ID" >> "$GITHUB_OUTPUT"
 
       - name: Poll submission status
