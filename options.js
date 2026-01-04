@@ -9,8 +9,11 @@ const meowLinkNoneRadio = document.getElementById("meowLinkNone");
 const meowLinkListRadio = document.getElementById("meowLinkList");
 const meowLinkThreadRadio = document.getElementById("meowLinkThread");
 const quickBoardsToggle = document.getElementById("quickBoardsToggle");
-const quickBoardsInput = document.getElementById("quickBoardsInput");
+const quickBoardNameInput = document.getElementById("quickBoardName");
+const quickBoardIdInput = document.getElementById("quickBoardId");
+const quickBoardSaveBtn = document.getElementById("quickBoardSaveBtn");
 const quickBoardsStatus = document.getElementById("quickBoardsStatus");
+const quickBoardsList = document.getElementById("quickBoardsList");
 const switchUsernameInput = document.getElementById("switchUsername");
 const switchPasswordInput = document.getElementById("switchPassword");
 const switchBtn = document.getElementById("switchBtn");
@@ -30,63 +33,130 @@ const uiLog = (...args) => {
   console.log(`[RiversideLite][options][${ts}]`, ...args);
 };
 
+let quickBoardsCache = [];
+let editingQuickBoardIndex = null;
+
 function refreshAccountListFromStorage() {
   chrome.storage.local.get({ accounts: [], activeUsername: "" }, ({ accounts, activeUsername }) => {
     renderAccountList(accounts || [], activeUsername || "");
   });
 }
 
-function formatQuickBoards(list) {
-  if (!Array.isArray(list) || !list.length) return "";
+function normalizeQuickBoards(list) {
+  if (!Array.isArray(list)) return [];
   return list
-    .filter((item) => item && item.name && item.id)
-    .map((item) => `${item.name}=${item.id}`)
-    .join("\n");
+    .map((item) => ({
+      name: (item?.name || "").trim(),
+      id: Number(item?.id),
+    }))
+    .filter((item) => item.name && Number.isInteger(item.id) && item.id > 0);
 }
 
-function parseQuickBoards(text) {
-  const lines = String(text || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const boards = [];
-  const errors = [];
-  lines.forEach((line, index) => {
-    const parsed = splitBoardLine(line);
-    const name = parsed[0].trim();
-    const idText = parsed[1].trim();
-    const id = Number(idText);
-    if (!name || !idText || !Number.isInteger(id) || id <= 0) {
-      errors.push(`第 ${index + 1} 行格式不正确`);
-      return;
-    }
-    boards.push({ name, id });
-  });
-  return { boards, errors };
+function setQuickBoardsControlsEnabled(enabled) {
+  const isEnabled = Boolean(enabled);
+  quickBoardNameInput.disabled = !isEnabled;
+  quickBoardIdInput.disabled = !isEnabled;
+  quickBoardSaveBtn.disabled = !isEnabled;
+  quickBoardsList.classList.toggle("disabled", !isEnabled);
 }
 
-function splitBoardLine(line) {
-  const separators = ["=", ",", "|"];
-  for (const sep of separators) {
-    const idx = line.indexOf(sep);
-    if (idx > -1) {
-      return [line.slice(0, idx), line.slice(idx + 1)];
-    }
-  }
-  return ["", ""];
+function resetQuickBoardForm() {
+  editingQuickBoardIndex = null;
+  quickBoardNameInput.value = "";
+  quickBoardIdInput.value = "";
+  quickBoardSaveBtn.textContent = "保存";
 }
 
-function saveQuickBoards() {
-  if (quickBoardsInput.disabled) return;
-  const { boards, errors } = parseQuickBoards(quickBoardsInput.value);
-  if (errors.length) {
-    quickBoardsStatus.textContent = errors[0];
-    quickBoardsStatus.style.color = "#c5221f";
+function setQuickBoardStatus(text, isError = false) {
+  quickBoardsStatus.textContent = text || "";
+  quickBoardsStatus.style.color = isError ? "#c5221f" : "#137333";
+}
+
+function renderQuickBoardsList(list) {
+  quickBoardsCache = normalizeQuickBoards(list);
+  quickBoardsList.innerHTML = "";
+  if (!quickBoardsCache.length) {
+    const empty = document.createElement("div");
+    empty.className = "status-text";
+    empty.textContent = "暂无快捷版块";
+    quickBoardsList.appendChild(empty);
     return;
   }
-  chrome.storage.local.set({ quickBoards: boards }, () => {
-    quickBoardsStatus.textContent = boards.length ? "已保存" : "已清空";
-    quickBoardsStatus.style.color = "#137333";
+  quickBoardsCache.forEach((board, index) => {
+    const row = document.createElement("div");
+    row.className = "account-row";
+
+    const left = document.createElement("div");
+    left.className = "account-meta";
+    const name = document.createElement("div");
+    name.className = "account-name";
+    name.textContent = board.name;
+    left.appendChild(name);
+    const badge = document.createElement("span");
+    badge.className = "account-badge";
+    badge.textContent = String(board.id);
+    left.appendChild(badge);
+
+    const actions = document.createElement("div");
+    actions.className = "account-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.textContent = "编辑";
+    editBtn.addEventListener("click", () => {
+      editingQuickBoardIndex = index;
+      quickBoardNameInput.value = board.name;
+      quickBoardIdInput.value = String(board.id);
+      quickBoardSaveBtn.textContent = "保存修改";
+      setQuickBoardStatus("编辑中");
+    });
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.textContent = "删除";
+    delBtn.className = "ghost";
+    delBtn.addEventListener("click", () => {
+      const next = quickBoardsCache.filter((_, i) => i !== index);
+      chrome.storage.local.set({ quickBoards: next }, () => {
+        renderQuickBoardsList(next);
+        if (editingQuickBoardIndex === index) {
+          resetQuickBoardForm();
+        }
+        setQuickBoardStatus("已删除");
+      });
+    });
+
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+    row.appendChild(left);
+    row.appendChild(actions);
+    quickBoardsList.appendChild(row);
+  });
+}
+
+function handleQuickBoardSave() {
+  if (quickBoardSaveBtn.disabled) return;
+  const name = quickBoardNameInput.value.trim();
+  const idValue = quickBoardIdInput.value.trim();
+  const id = Number(idValue);
+  if (!name || !idValue) {
+    setQuickBoardStatus("请填写版块名称和编号", true);
+    return;
+  }
+  if (!Number.isInteger(id) || id <= 0) {
+    setQuickBoardStatus("版块编号需为正整数", true);
+    return;
+  }
+  const next = [...quickBoardsCache];
+  if (editingQuickBoardIndex !== null && next[editingQuickBoardIndex]) {
+    next[editingQuickBoardIndex] = { name, id };
+  } else {
+    next.push({ name, id });
+  }
+  chrome.storage.local.set({ quickBoards: next }, () => {
+    renderQuickBoardsList(next);
+    resetQuickBoardForm();
+    setQuickBoardStatus("已保存");
   });
 }
 
@@ -111,8 +181,9 @@ function init() {
       versionNewRadio.checked = true;
     }
     quickBoardsToggle.checked = Boolean(items.quickBoardsEnabled);
-    quickBoardsInput.disabled = !quickBoardsToggle.checked;
-    quickBoardsInput.value = formatQuickBoards(items.quickBoards || []);
+    setQuickBoardsControlsEnabled(quickBoardsToggle.checked);
+    renderQuickBoardsList(items.quickBoards || []);
+    resetQuickBoardForm();
     renderAccountList(items.accounts || [], items.activeUsername || "");
   });
 
@@ -159,12 +230,16 @@ function init() {
 
   quickBoardsToggle.addEventListener("change", () => {
     const enabled = quickBoardsToggle.checked;
-    quickBoardsInput.disabled = !enabled;
     chrome.storage.local.set({ quickBoardsEnabled: enabled });
+    setQuickBoardsControlsEnabled(enabled);
+    if (!enabled) {
+      resetQuickBoardForm();
+      setQuickBoardStatus("");
+    }
   });
 
-  quickBoardsInput.addEventListener("change", () => {
-    saveQuickBoards();
+  quickBoardSaveBtn.addEventListener("click", () => {
+    handleQuickBoardSave();
   });
 
   switchBtn?.addEventListener("click", async () => {
@@ -287,6 +362,21 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
   if (changes.accounts || changes.activeUsername) {
     refreshAccountListFromStorage();
+  }
+  if (changes.quickBoardsEnabled) {
+    const enabled = Boolean(changes.quickBoardsEnabled.newValue);
+    quickBoardsToggle.checked = enabled;
+    setQuickBoardsControlsEnabled(enabled);
+    if (!enabled) {
+      resetQuickBoardForm();
+      setQuickBoardStatus("");
+    }
+  }
+  if (changes.quickBoards) {
+    renderQuickBoardsList(changes.quickBoards.newValue || []);
+    if (editingQuickBoardIndex !== null) {
+      resetQuickBoardForm();
+    }
   }
 });
 

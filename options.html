@@ -316,6 +316,10 @@
       flex-direction: column;
       gap: 6px;
     }
+    .account-list.disabled {
+      opacity: 0.6;
+      pointer-events: none;
+    }
     .account-row {
       display: flex;
       align-items: center;
@@ -402,15 +406,23 @@
         </label>
         <label for="quickBoardsToggle" class="toggle-text">启用快捷版块入口</label>
       </div>
-      <p>开启后，弹窗“前往首页”左侧会出现入口按钮。请按“版块名=版块编号”填写，每行一个，例如：水区=370。本插件不做预设。</p>
-      <div class="text-row" style="align-items: flex-start;">
-        <span>版块列表</span>
-        <textarea id="quickBoardsInput" placeholder="示例：&#10;水区=370&#10;校园生活=123"></textarea>
+      <p>开启后，弹窗“前往首页”左侧会出现入口按钮。请填写版块名称与编号后点击保存，本插件不做预设。</p>
+      <div class="text-row">
+        <span>版块名称</span>
+        <input type="text" id="quickBoardName" placeholder="如：水区">
       </div>
       <div class="text-row">
-        <span>状态</span>
-        <span id="quickBoardsStatus" class="status-text"></span>
+        <span>版块编号</span>
+        <input type="text" id="quickBoardId" placeholder="如：370">
       </div>
+      <div class="text-row">
+        <span>操作</span>
+        <div class="inline-actions">
+          <button id="quickBoardSaveBtn" type="button">保存</button>
+          <span id="quickBoardsStatus" class="status-text"></span>
+        </div>
+      </div>
+      <div id="quickBoardsList" class="account-list"></div>
     </div>
 
     <div class="setting-group">
