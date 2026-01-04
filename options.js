@@ -8,6 +8,9 @@ const meowTestStatus = document.getElementById("meowTestStatus");
 const meowLinkNoneRadio = document.getElementById("meowLinkNone");
 const meowLinkListRadio = document.getElementById("meowLinkList");
 const meowLinkThreadRadio = document.getElementById("meowLinkThread");
+const quickBoardsToggle = document.getElementById("quickBoardsToggle");
+const quickBoardsInput = document.getElementById("quickBoardsInput");
+const quickBoardsStatus = document.getElementById("quickBoardsStatus");
 const switchUsernameInput = document.getElementById("switchUsername");
 const switchPasswordInput = document.getElementById("switchPassword");
 const switchBtn = document.getElementById("switchBtn");
@@ -33,6 +36,60 @@ function refreshAccountListFromStorage() {
   });
 }
 
+function formatQuickBoards(list) {
+  if (!Array.isArray(list) || !list.length) return "";
+  return list
+    .filter((item) => item && item.name && item.id)
+    .map((item) => `${item.name}=${item.id}`)
+    .join("\n");
+}
+
+function parseQuickBoards(text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const boards = [];
+  const errors = [];
+  lines.forEach((line, index) => {
+    const parsed = splitBoardLine(line);
+    const name = parsed[0].trim();
+    const idText = parsed[1].trim();
+    const id = Number(idText);
+    if (!name || !idText || !Number.isInteger(id) || id <= 0) {
+      errors.push(`第 ${index + 1} 行格式不正确`);
+      return;
+    }
+    boards.push({ name, id });
+  });
+  return { boards, errors };
+}
+
+function splitBoardLine(line) {
+  const separators = ["=", ",", "|"];
+  for (const sep of separators) {
+    const idx = line.indexOf(sep);
+    if (idx > -1) {
+      return [line.slice(0, idx), line.slice(idx + 1)];
+    }
+  }
+  return ["", ""];
+}
+
+function saveQuickBoards() {
+  if (quickBoardsInput.disabled) return;
+  const { boards, errors } = parseQuickBoards(quickBoardsInput.value);
+  if (errors.length) {
+    quickBoardsStatus.textContent = errors[0];
+    quickBoardsStatus.style.color = "#c5221f";
+    return;
+  }
+  chrome.storage.local.set({ quickBoards: boards }, () => {
+    quickBoardsStatus.textContent = boards.length ? "已保存" : "已清空";
+    quickBoardsStatus.style.color = "#137333";
+  });
+}
+
 function init() {
   // Load settings and update UI
   chrome.storage.local.get(STORAGE_DEFAULTS, (items) => {
@@ -53,6 +110,9 @@ function init() {
     } else {
       versionNewRadio.checked = true;
     }
+    quickBoardsToggle.checked = Boolean(items.quickBoardsEnabled);
+    quickBoardsInput.disabled = !quickBoardsToggle.checked;
+    quickBoardsInput.value = formatQuickBoards(items.quickBoards || []);
     renderAccountList(items.accounts || [], items.activeUsername || "");
   });
 
@@ -95,6 +155,16 @@ function init() {
     if (meowLinkThreadRadio.checked) {
       chrome.storage.local.set({ meowLinkMode: "thread" });
     }
+  });
+
+  quickBoardsToggle.addEventListener("change", () => {
+    const enabled = quickBoardsToggle.checked;
+    quickBoardsInput.disabled = !enabled;
+    chrome.storage.local.set({ quickBoardsEnabled: enabled });
+  });
+
+  quickBoardsInput.addEventListener("change", () => {
+    saveQuickBoards();
   });
 
   switchBtn?.addEventListener("click", async () => {

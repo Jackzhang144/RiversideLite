@@ -97,6 +97,16 @@
         flex-direction: column;
         gap: 10px;
       }
+      .list.boards {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .list.boards .board-item {
+        padding: 8px 6px;
+        text-align: center;
+        font-size: 12px;
+      }
       .item {
         position: relative;
         padding: 10px;
@@ -161,9 +171,11 @@
       }
       .footer {
         margin-top: auto;
-        text-align: right;
         padding-top: 8px;
         border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
       }
       .btn {
         display: inline-block;
@@ -281,6 +293,13 @@
         color: var(--primary);
         border-color: var(--border);
       }
+      .ghost-btn:hover {
+        color: #fff;
+      }
+      .board-item {
+        width: 100%;
+        text-align: left;
+      }
     </style>
   </head>
   <body>
@@ -304,6 +323,7 @@
     <div id="status">加载中...</div>
     <div id="list" class="list"></div>
     <div class="footer">
+      <button id="boardsBtn" class="btn ghost-btn hidden">版块列表</button>
       <button id="homeBtn" class="btn">前往首页</button>
     </div>
     <div id="captchaPanel" class="captcha-panel hidden">

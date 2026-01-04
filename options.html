@@ -87,6 +87,22 @@
       background: #fdfefe;
       transition: border-color 120ms ease, box-shadow 120ms ease;
     }
+    .text-row textarea {
+      flex: 1;
+      min-height: 88px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      background: #fdfefe;
+      resize: vertical;
+      transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+    .text-row textarea:focus {
+      border-color: #aac4ec;
+      box-shadow: 0 0 0 2px rgba(31, 76, 143, 0.12);
+      outline: none;
+    }
     .text-row input[type="text"]:focus {
       border-color: #aac4ec;
       box-shadow: 0 0 0 2px rgba(31, 76, 143, 0.12);
@@ -364,6 +380,26 @@
           <span class="pill-bg"></span>
           <span class="pill-border"></span>
         </label>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <h1>快捷版块 <span class="hint">弹窗内一键打开</span></h1>
+      <div class="toggle-row">
+        <label for="quickBoardsToggle" class="toggle-wrapper">
+          <input type="checkbox" id="quickBoardsToggle" class="toggle-input">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>
+        <label for="quickBoardsToggle" class="toggle-text">启用快捷版块入口</label>
+      </div>
+      <p>开启后，弹窗“前往首页”左侧会出现入口按钮。请按“版块名=版块编号”填写，每行一个，例如：水区=370。本插件不做预设。</p>
+      <div class="text-row" style="align-items: flex-start;">
+        <span>版块列表</span>
+        <textarea id="quickBoardsInput" placeholder="示例：&#10;水区=370&#10;校园生活=123"></textarea>
+      </div>
+      <div class="text-row">
+        <span>状态</span>
+        <span id="quickBoardsStatus" class="status-text"></span>
       </div>
     </div>
 

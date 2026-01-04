@@ -1,6 +1,7 @@
 const STATUS = document.getElementById("status");
 const LIST = document.getElementById("list");
 const HOME_BTN = document.getElementById("homeBtn");
+const BOARDS_BTN = document.getElementById("boardsBtn");
 const OPTIONS_BTN = document.getElementById("btnOptions");
 const ACCOUNT_SELECT = document.getElementById("accountSelect");
 const ACCOUNT_SWITCH_BTN = document.getElementById("accountSwitchBtn");
@@ -16,6 +17,10 @@ let currentVersion = "new";
 let lastSummaryCache = null;
 let fetchSummaryPromise = null;
 let lastFetchTs = 0;
+let quickBoardsEnabled = false;
+let quickBoards = [];
+let showingBoards = false;
+let lastRenderData = null;
 const uiLog = (...args) => {
   const ts = new Date().toISOString();
   console.log(`[RiversideLite][popup][${ts}]`, ...args);
@@ -31,6 +36,7 @@ const FALLBACK_URL_OLD = "https://bbs.uestc.edu.cn/home.php?mod=space&do=notice"
 const CHAT_URL_NEW_BASE = "https://bbs.uestc.edu.cn/messages/chat";
 const CHAT_URL_OLD_BASE = "https://bbs.uestc.edu.cn/home.php?mod=space&do=pm";
 HOME_BTN?.addEventListener("click", openHome);
+BOARDS_BTN?.addEventListener("click", toggleBoardsView);
 OPTIONS_BTN?.addEventListener("click", openOptions);
 ACCOUNT_SWITCH_BTN?.addEventListener("click", switchAccountFromPopup);
 CAPTCHA_REFRESH?.addEventListener("click", () => ensurePopupCaptcha(true));
@@ -44,22 +50,49 @@ function init() {
     populateAccountSelect(sessionAccounts.accounts, activeAccountUsername);
   }
 
-  chrome.storage.local.get(STORAGE_DEFAULTS, ({ version, accounts, activeUsername, lastSummaryCache: cache }) => {
-    currentVersion = version === "old" ? "old" : "new";
-    activeAccountUsername = activeUsername || activeAccountUsername;
-    lastSummaryCache = cache || null;
-    uiLog("init storage loaded", { version: currentVersion, activeAccountUsername, hasCache: Boolean(lastSummaryCache) });
-    if (lastSummaryCache?.notifications || lastSummaryCache?.chats) {
-      renderData(lastSummaryCache, true);
-      setStatus("使用缓存，正在刷新...");
+  chrome.storage.local.get(
+    STORAGE_DEFAULTS,
+    ({ version, accounts, activeUsername, lastSummaryCache: cache, quickBoardsEnabled: qbEnabled, quickBoards: qb }) => {
+      currentVersion = version === "old" ? "old" : "new";
+      activeAccountUsername = activeUsername || activeAccountUsername;
+      lastSummaryCache = cache || null;
+      quickBoardsEnabled = Boolean(qbEnabled);
+      quickBoards = normalizeQuickBoards(qb);
+      updateBoardsButton();
+      uiLog("init storage loaded", { version: currentVersion, activeAccountUsername, hasCache: Boolean(lastSummaryCache) });
+      if (lastSummaryCache?.notifications || lastSummaryCache?.chats) {
+        renderData(lastSummaryCache, true);
+        setStatus("使用缓存，正在刷新...");
+      }
+      populateAccountSelect(accounts || [], activeAccountUsername);
+      fetchSummaryThrottled(true).catch((error) => {
+        console.error(error);
+        setStatus("加载失败，请检查是否已登录。", true);
+      });
     }
-    populateAccountSelect(accounts || [], activeAccountUsername);
-    fetchSummaryThrottled(true).catch((error) => {
-      console.error(error);
-      setStatus("加载失败，请检查是否已登录。", true);
-    });
-  });
+  );
 }
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local") return;
+  if (changes.quickBoardsEnabled) {
+    quickBoardsEnabled = Boolean(changes.quickBoardsEnabled.newValue);
+    updateBoardsButton();
+    if (!quickBoardsEnabled && showingBoards) {
+      showingBoards = false;
+      updateBoardsButton();
+      if (lastRenderData) {
+        renderData(lastRenderData, false);
+      }
+    }
+  }
+  if (changes.quickBoards) {
+    quickBoards = normalizeQuickBoards(changes.quickBoards.newValue);
+    if (showingBoards) {
+      renderBoardsList();
+    }
+  }
+});
 
 function readAccountsSession() {
   try {
@@ -101,12 +134,16 @@ async function fetchSummaryThrottled(force = false) {
 }
 
 async function fetchSummaryInternal() {
-  setStatus("加载中...");
+  const shouldUpdateStatus = !showingBoards;
+  if (shouldUpdateStatus) {
+    setStatus("加载中...");
+  }
   uiLog("fetchSummary start");
   const { ok, data, error, status } = await chrome.runtime.sendMessage({
     type: "fetchSummary",
   });
   if (!ok) {
+    if (!shouldUpdateStatus) return;
     const code = status || extractStatusCode(error);
     if (code === 401) {
       setStatus("未登录或登录已失效，请先在站点登录后重试。", true);
@@ -127,6 +164,7 @@ async function fetchSummaryInternal() {
 
   // API 响应包裹了 code/message? 兼容直接取 data.data/new_notifications
   if (data?.code && data.code !== 0) {
+    if (!shouldUpdateStatus) return;
     if (data.code === 403) {
       renderForbiddenNotice();
       return;
@@ -170,11 +208,14 @@ function buildRenderData(notifications, chats, chatCount) {
   };
 }
 
-function renderData(renderData, fromCache = false) {
-  const notifications = Array.isArray(renderData?.notifications) ? renderData.notifications : [];
-  const chats = Array.isArray(renderData?.chats) ? renderData.chats : [];
-  const chatCount = renderData?.chatCount || 0;
+function renderData(renderPayload, fromCache = false) {
+  lastRenderData = renderPayload;
+  if (showingBoards) return;
+  const notifications = Array.isArray(renderPayload?.notifications) ? renderPayload.notifications : [];
+  const chats = Array.isArray(renderPayload?.chats) ? renderPayload.chats : [];
+  const chatCount = renderPayload?.chatCount || 0;
   LIST.innerHTML = "";
+  LIST.classList.remove("boards");
   if (!fromCache) setStatus("");
   HOME_BTN?.classList.remove("hidden");
 
@@ -382,6 +423,75 @@ function saveSummaryCache(notifications, chats, chatCount) {
       chatCount,
     },
   });
+}
+
+function normalizeQuickBoards(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((item) => ({
+      name: (item?.name || "").trim(),
+      id: Number(item?.id),
+    }))
+    .filter((item) => item.name && Number.isInteger(item.id) && item.id > 0);
+}
+
+function updateBoardsButton() {
+  if (!BOARDS_BTN) return;
+  if (!quickBoardsEnabled) {
+    BOARDS_BTN.classList.add("hidden");
+    showingBoards = false;
+    return;
+  }
+  BOARDS_BTN.classList.remove("hidden");
+  BOARDS_BTN.textContent = showingBoards ? "返回消息" : "版块列表";
+}
+
+function toggleBoardsView() {
+  if (!quickBoardsEnabled) return;
+  showingBoards = !showingBoards;
+  updateBoardsButton();
+  if (showingBoards) {
+    renderBoardsList();
+    return;
+  }
+  if (lastRenderData) {
+    renderData(lastRenderData, false);
+    return;
+  }
+  fetchSummaryThrottled(true).catch((error) => {
+    console.error(error);
+    setStatus("加载失败，请稍后再试。", true);
+  });
+}
+
+function renderBoardsList() {
+  LIST.innerHTML = "";
+  LIST.classList.add("boards");
+  setStatus("版块列表");
+  HOME_BTN?.classList.remove("hidden");
+  if (!quickBoards.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "未配置版块，请在选项页启用并填写版块列表。";
+    LIST.appendChild(empty);
+    return;
+  }
+  quickBoards.forEach((board) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "item board-item";
+    btn.textContent = board.name;
+    btn.addEventListener("click", () => {
+      openBoard(board.id);
+    });
+    LIST.appendChild(btn);
+  });
+}
+
+function openBoard(boardId) {
+  if (!boardId) return;
+  chrome.tabs.create({ url: `https://bbs.uestc.edu.cn/forum/${boardId}` });
+  window.close();
 }
 
 function summarizeCaptcha(info) {
