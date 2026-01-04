@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "清水河畔助手 Lite",
-  "version": "2.2",
+  "version": "2.3",
   "description": "清水河畔助手：徽标提醒、弹窗摘要、桌面通知、MeoW 推送与多账号快速切换。",
   "icons": {
     "16": "River.png",
