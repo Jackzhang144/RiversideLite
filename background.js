@@ -412,18 +412,50 @@ async function switchAccountLegacy(username, password, captcha) {
       pwd = found.password;
     }
   }
-  if (!targetUser || !pwd) {
+  if (!targetUser) {
+    throw new Error("请填写用户名和密码，或先在选项页保存账号。");
+  }
+  if (!pwd) {
+    const currentUser = await fetchCurrentUsername();
+    if (currentUser && currentUser === targetUser) {
+      log("switchAccountLegacy reuse current session", { targetUser });
+      await persistState({
+        ...cachedState,
+        lastTotal: 0,
+        lastErrorCode: "",
+        activeUsername: targetUser,
+      });
+      await checkStatus();
+      return true;
+    }
     throw new Error("请填写用户名和密码，或先在选项页保存账号。");
   }
 
-  try {
-    log("switchAccountLegacy logout + login", { targetUser, hasPwd: Boolean(pwd) });
-    await logoutLegacy().catch((err) => {
-      console.warn("logout skipped or failed", err);
-    });
-    await persistState({ ...cachedState, authorizationHeader: "", lastTotal: 0, activeUsername: targetUser });
+  const sameUser = targetUser === cachedState.activeUsername;
+  if (sameUser && cachedState.authorizationHeader) {
+    log("switchAccountLegacy same user, reuse auth", { targetUser });
+    await checkStatus();
+    return true;
+  }
+  if (sameUser && !cachedState.authorizationHeader) {
+    log("switchAccountLegacy same user, adopting auth", { targetUser });
+    const adopted = await ensureAuthorization();
+    if (adopted) {
+      await persistState({
+        ...cachedState,
+        lastTotal: 0,
+        lastErrorCode: "",
+      });
+      await checkStatus();
+      return true;
+    }
+  }
 
+  let loginSucceeded = false;
+  try {
+    log("switchAccountLegacy login", { targetUser, hasPwd: Boolean(pwd) });
     const loginOk = await loginLegacy(targetUser, pwd, captcha);
+    loginSucceeded = Boolean(loginOk);
     if (!loginOk) {
       throw new Error("登录失败，请检查用户名或密码");
     }
@@ -443,8 +475,34 @@ async function switchAccountLegacy(username, password, captcha) {
     return true;
   } catch (error) {
     console.error("switchAccountLegacy failed", summarizeLoginError(error));
-    await persistState({ ...cachedState, authorizationHeader: "", lastTotal: 0 });
+    if (loginSucceeded) {
+      await persistState({
+        ...cachedState,
+        authorizationHeader: "",
+        lastTotal: 0,
+        lastErrorCode: "",
+        activeUsername: targetUser,
+      });
+      await reloadBbsTabs();
+    }
     throw error;
+  }
+}
+
+async function fetchCurrentUsername() {
+  try {
+    const url = `${API_BASE}/user/me/profile?user_summary=1`;
+    const res = await callApiWithAuth("GET", url);
+    if (!res.ok) return "";
+    const data = await res.json();
+    return (
+      data?.data?.user_summary?.username ||
+      data?.user?.username ||
+      ""
+    );
+  } catch (error) {
+    console.warn("fetchCurrentUsername failed", error);
+    return "";
   }
 }
 
