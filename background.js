@@ -396,6 +396,7 @@ async function ensureBadge() {
 async function switchAccountLegacy(username, password, captcha) {
   await ensureStateLoaded();
   const targetUser = (username || cachedState.activeUsername || "").trim();
+  const previousUser = cachedState.activeUsername || "";
   let pwd = password || "";
   log("switchAccountLegacy start", {
     targetUser,
@@ -418,6 +419,19 @@ async function switchAccountLegacy(username, password, captcha) {
   }
   if (!targetUser) {
     throw new Error("请填写用户名和密码，或先在选项页保存账号。");
+  }
+  if (pwd) {
+    const currentUser = await fetchCurrentUsername();
+    if (currentUser && currentUser !== targetUser) {
+      log("switchAccountLegacy logout before login", { currentUser, targetUser });
+      await logoutLegacy();
+      await persistState({
+        ...cachedState,
+        authorizationHeader: "",
+        lastTotal: 0,
+        lastErrorCode: "",
+      });
+    }
   }
   if (!pwd) {
     const currentUser = await fetchCurrentUsername();
@@ -468,12 +482,19 @@ async function switchAccountLegacy(username, password, captcha) {
     if (!adopted) {
       throw new Error("登录成功但获取凭证失败，请在站点打开页面后重试");
     }
+    const confirmedUser = await fetchCurrentUsername();
+    if (confirmedUser && confirmedUser !== targetUser) {
+      const err = new Error(`切换失败，当前仍是 ${confirmedUser}，请先退出登录后重试`);
+      err.currentUser = confirmedUser;
+      throw err;
+    }
     await persistState({
       ...cachedState,
       lastTotal: 0,
       lastErrorCode: "",
       activeUsername: targetUser,
     });
+    await syncAuthorizationToTabs(cachedState.authorizationHeader);
     await reloadBbsTabs();
     await checkStatus();
     return true;
@@ -485,8 +506,9 @@ async function switchAccountLegacy(username, password, captcha) {
         authorizationHeader: "",
         lastTotal: 0,
         lastErrorCode: "",
-        activeUsername: targetUser,
+        activeUsername: previousUser,
       });
+      await syncAuthorizationToTabs(cachedState.authorizationHeader);
       await reloadBbsTabs();
     }
     throw error;
@@ -997,6 +1019,38 @@ async function reloadBbsTabs() {
     }
   } catch (error) {
     console.error("reloadBbsTabs failed", error);
+  }
+}
+
+async function syncAuthorizationToTabs(auth) {
+  try {
+    const tabs = await chrome.tabs.query({ url: ["*://bbs.uestc.edu.cn/*"] });
+    const targets = tabs.filter((tab) => tab.id);
+    if (!targets.length) return false;
+    await Promise.all(
+      targets.map((tab) =>
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          args: [auth],
+          func: (value) => {
+            try {
+              if (value) {
+                localStorage.setItem("newbbs_authorization", value);
+              } else {
+                localStorage.removeItem("newbbs_authorization");
+              }
+              return true;
+            } catch {
+              return false;
+            }
+          },
+        })
+      )
+    );
+    return true;
+  } catch (error) {
+    console.error("syncAuthorizationToTabs failed", error);
+    return false;
   }
 }
 
