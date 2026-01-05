@@ -176,6 +176,10 @@ function getSummaryCounts(payload) {
       notice += countReportNotifications(payload);
     }
   }
+  const notificationsCount = Array.isArray(payload?.new_notifications) ? payload.new_notifications.length : 0;
+  if (notificationsCount > notice) {
+    notice = notificationsCount;
+  }
   return { chat, notice, total: chat + notice };
 }
 
